@@ -12,7 +12,7 @@
 // own defend for kills on or near a held flag).
 import { addScore } from './streaks.js';
 import { BF, bfLayout, inArea } from '../shared/bf.js';
-import { wallsInBox, wallScratch } from '../shared/geometry.js';
+import { wallsInBox, wallScratch, hyp } from '../shared/geometry.js';
 import { closestBot, decodeStats, encodeStats, makeZones, packZone, restoreStats, unpackZone, zoneObjective } from './mode-kit.js';
 import { bestSpot, faceTo, intoArea, sendBack, spawnSpots, stepBounds, stepFlag, warmPaths } from './bf-kit.js';
 
@@ -92,7 +92,7 @@ export class ConquestRules {
   // Facing the nearest flag.
   _face(s) {
     let best = null, bd = Infinity;
-    for (const z of this.zones) { const d = Math.hypot(z.x - s.x, z.z - s.z); if (d < bd) { bd = d; best = z; } }
+    for (const z of this.zones) { const d = hyp(z.x - s.x, z.z - s.z); if (d < bd) { bd = d; best = z; } }
     return faceTo(s, best ?? { x: this.sim.map.width / 2, z: this.sim.map.height / 2 });
   }
 
@@ -100,7 +100,7 @@ export class ConquestRules {
     if (this.spots || !this.sim.nav) return this.spots;
     const l = this.layout, [r0, r1] = BF.cq.flagSpawn;
     const all = spawnSpots(this.sim, l.area, [...l.hq, ...l.flags]);
-    this.spots = this.zones.map(z => all.filter(s => { const d = Math.hypot(s.x - z.x, s.z - z.z); return d >= Math.max(r0, z.r + 1) && d <= r1; }));
+    this.spots = this.zones.map(z => all.filter(s => { const d = hyp(s.x - z.x, s.z - z.z); return d >= Math.max(r0, z.r + 1) && d <= r1; }));
     return this.spots;
   }
 
@@ -119,13 +119,13 @@ export class ConquestRules {
     let target = p.bot?.objective ?? null;
     if (!target) {
       let bd = Infinity;
-      for (const z of this.zones) if (z.owner !== team) { const d = Math.hypot(z.x - hq.x, z.z - hq.z); if (d < bd) { bd = d; target = z; } }
+      for (const z of this.zones) if (z.owner !== team) { const d = hyp(z.x - hq.x, z.z - hq.z); if (d < bd) { bd = d; target = z; } }
     }
     if (!target) return null;
-    let best = null, bd = Math.hypot(hq.x - target.x, hq.z - target.z);
+    let best = null, bd = hyp(hq.x - target.x, hq.z - target.z);
     for (const z of this.zones) {
       if (!this.canDeploy(z, team)) continue;
-      const d = Math.hypot(z.x - target.x, z.z - target.z);
+      const d = hyp(z.x - target.x, z.z - target.z);
       if (d < bd) { bd = d; best = z; }
     }
     return best;
@@ -220,7 +220,7 @@ export class ConquestRules {
     const assign = (b, z, role) => { b.setObjective(zoneObjective(z, role)); free.delete(b); load.set(z, (load.get(z) ?? 0) + 1); };
     for (const z of threatened) {
       for (let k = 0; k < 3; k++) {
-        const b = closestBot([...free].filter(q => Math.hypot(q.ps.x - z.x, q.ps.z - z.z) < 70), z.x, z.z);
+        const b = closestBot([...free].filter(q => hyp(q.ps.x - z.x, q.ps.z - z.z) < 70), z.x, z.z);
         if (b) assign(b, z, 'defend');
       }
     }
@@ -247,7 +247,7 @@ export class ConquestRules {
         const n = load.get(z) ?? 0;
         if (n >= per) continue;
         // Neutral flags are quicker to take; a flag the other side is taking from us is urgent.
-        const cost = Math.hypot(z.x - b.ps.x, z.z - b.ps.z) + n * (4 + b.S.objSplit * 1.5) + (z.owner === 1 - team ? 8 : 0);
+        const cost = hyp(z.x - b.ps.x, z.z - b.ps.z) + n * (4 + b.S.objSplit * 1.5) + (z.owner === 1 - team ? 8 : 0);
         if (cost < bc) { bc = cost; best = z; }
       }
       if (best) assign(b, best, 'attack');

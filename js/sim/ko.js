@@ -8,6 +8,7 @@
 import { SCORE } from '../shared/catalog.js';
 import { addScore } from './streaks.js';
 import { chaseObjective, closestBot, decodeStats, encodeStats, restoreStats } from './mode-kit.js';
+import { hyp } from '../shared/geometry.js';
 
 export const KO = { armor: 0.6, guard: 9, killScore: 300, guardScore: 75, guards: 2 };
 const STATS = ['vipKills', 'guards', 'vipTurns'];
@@ -69,7 +70,7 @@ export class KoRules {
     }
     if (!killer || killer.team === team || info.away) return;
     const mine = this.vip[killer.team];
-    if (mine && mine !== killer && mine.alive && Math.hypot(mine.ps.x - target.ps.x, mine.ps.z - target.ps.z) <= KO.guard) {
+    if (mine && mine !== killer && mine.alive && hyp(mine.ps.x - target.ps.x, mine.ps.z - target.ps.z) <= KO.guard) {
       killer.guards = (killer.guards ?? 0) + 1;
       addScore(killer.score, KO.guardScore);
       sim._medal(killer, 'bodyguard');

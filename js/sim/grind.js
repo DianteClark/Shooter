@@ -9,6 +9,7 @@
 import { SCORE } from '../shared/catalog.js';
 import { addScore } from './streaks.js';
 import { chaseObjective, closestBot, decodeStats, encodeStats, makeZones, r2, restoreStats, zoneObjective } from './mode-kit.js';
+import { hyp } from '../shared/geometry.js';
 
 export const GRIND = { reach: 1.4, life: 30, max: 24, bankEvery: 0.4, bankScore: 50, go: 3, near: 18, radius: 4 };
 const STATS = ['carry', 'banked', 'confirms'];
@@ -97,12 +98,12 @@ export class GrindRules {
   // bank nearest home to catch carriers. ----
   plan(team, crew) {
     const sim = this.sim, free = new Set(crew);
-    const nearest = (x, z) => this.banks.reduce((a, b) => (Math.hypot(b.x - x, b.z - z) < Math.hypot(a.x - x, a.z - z) ? b : a), this.banks[0]);
+    const nearest = (x, z) => this.banks.reduce((a, b) => (hyp(b.x - x, b.z - z) < hyp(a.x - x, a.z - z) ? b : a), this.banks[0]);
     for (const b of crew) {
       const c = b.p.carry ?? 0;
       if (!c || !this.banks.length) continue;
       const bank = nearest(b.ps.x, b.ps.z);
-      if (c >= GRIND.go || Math.hypot(bank.x - b.ps.x, bank.z - b.ps.z) < GRIND.near) {
+      if (c >= GRIND.go || hyp(bank.x - b.ps.x, bank.z - b.ps.z) < GRIND.near) {
         b.setObjective({ ...zoneObjective(bank, 'attack', 'bank'), commit: c >= GRIND.go });
         free.delete(b);
       }
@@ -117,7 +118,7 @@ export class GrindRules {
     const pairs = [];
     for (const b of free) {
       for (const tag of sim.tags) {
-        const d = Math.hypot(tag.x - b.ps.x, tag.z - b.ps.z), own = tag.team === team;
+        const d = hyp(tag.x - b.ps.x, tag.z - b.ps.z), own = tag.team === team;
         if (d > (own ? 12 : b.S.tagSight)) continue;
         pairs.push({ cost: d - tag.n * 3 + (own ? 6 : 0) + (b.targetVisible ? 8 : 0), b, tag });
       }

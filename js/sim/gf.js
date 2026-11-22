@@ -13,6 +13,7 @@ import { PRIMARY_IDS, SECONDARY_IDS, WEAPON_CATEGORY, GOLDEN_ID } from '../share
 import { WEAPONS } from '../shared/weapons.js';
 import { botAttachments } from './bots.js';
 import { alive, chaseObjective, decodeStats, encodeStats, restoreStats, walkable, zoneObjective } from './mode-kit.js';
+import { hyp } from '../shared/geometry.js';
 
 export const GF = { freeze: 5, post: 4, ot: 15, flagR: 3, capture: 3, kitEvery: 2, maxRounds: 15 };
 const STATES = ['freeze', 'live', 'post'];
@@ -55,7 +56,7 @@ export function flagSpot(map) {
     for (const w of map.walls) {
       if (w.kind === 'border') continue;
       const nx = Math.max(w.x, Math.min(x, w.x + w.w)), nz = Math.max(w.z, Math.min(z, w.z + w.d));
-      if (Math.hypot(nx - x, nz - z) < need) return false;
+      if (hyp(nx - x, nz - z) < need) return false;
     }
     return true;
   };
@@ -121,7 +122,7 @@ export class GfRules {
       // Partners start side by side: a random spawn of their end, then the spawn nearest it.
       const list = sim.map.spawns[this.sideOf(t)];
       const first = list[Math.floor(sim.rng() * list.length)];
-      const order = list.slice().sort((a, b) => Math.hypot(a.x - first.x, a.z - first.z) - Math.hypot(b.x - first.x, b.z - first.z));
+      const order = list.slice().sort((a, b) => hyp(a.x - first.x, a.z - first.z) - hyp(b.x - first.x, b.z - first.z));
       let k = 0;
       for (const p of sim.players) {
         if (p.team !== t || p.dummy) continue;
@@ -232,13 +233,13 @@ export class GfRules {
       // The opening: walk up toward the middle, partners a few metres apart.
       if (elapsed < 6 + (this.round % 3)) {
         const side = mates.indexOf(p) === 0 ? 1 : -1;
-        const dx = f.x - p.ps.x, dz = f.z - p.ps.z, d = Math.hypot(dx, dz) || 1;
+        const dx = f.x - p.ps.x, dz = f.z - p.ps.z, d = hyp(dx, dz) || 1;
         const at = walkable(sim, p.ps.x + dx / d * Math.min(d * 0.6, 14) - dz / d * 4 * side, p.ps.z + dz / d * Math.min(d * 0.6, 14) + dx / d * 4 * side);
         b.setObjective({ key: `gfopen:${this.round}:${i}`, x: at.x, z: at.z, r: 2, role: 'attack' });
         return;
       }
       let foe = foes[0], best = Infinity;
-      for (const q of foes) { const d = Math.hypot(q.ps.x - p.ps.x, q.ps.z - p.ps.z); if (d < best) { best = d; foe = q; } }
+      for (const q of foes) { const d = hyp(q.ps.x - p.ps.x, q.ps.z - p.ps.z); if (d < best) { best = d; foe = q; } }
       // The second of a pair swings wide of the line to the enemy.
       const flank = mates.length > 1 && mates.indexOf(p) === 1 && best > 10;
       let tx = foe.ps.x, tz = foe.ps.z;

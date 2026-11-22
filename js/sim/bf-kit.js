@@ -1,7 +1,7 @@
 // What Conquest and Breakthrough (js/sim/conquest.js, breakthrough.js) share on the host: flag capture, spawn spots
 // sampled from the nav grid, the out-of-bounds clock, and the bots' way back in bounds. docs/MODES.md "Conquest and
 // Breakthrough"; the layouts and numbers are js/shared/bf.js.
-import { hasLineOfSight } from '../shared/geometry.js';
+import { hasLineOfSight, hyp } from '../shared/geometry.js';
 import { BF, inArea } from '../shared/bf.js';
 
 const GRID = 3;            // Spawn spot spacing (metres).
@@ -78,7 +78,7 @@ export function bestSpot(sim, p, spots, toward = null) {
     }
     const usedAgo = sim.time - (sim.spawnUsedAt.get(s) ?? -99);
     let score = Math.min(nearest, 40) - (seen ? 30 : 0) - (usedAgo < 2.5 ? 12 : 0) + sim.rng() * 4;
-    if (toward) score -= Math.hypot(toward.x - s.x, toward.z - s.z) * 0.15;
+    if (toward) score -= hyp(toward.x - s.x, toward.z - s.z) * 0.15;
     if (score > bestScore) { bestScore = score; best = s; }
   }
   if (best) sim.spawnUsedAt.set(best, sim.time);

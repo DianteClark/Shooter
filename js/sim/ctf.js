@@ -17,6 +17,7 @@
 
 import { CTF, CTF_STATES } from '../shared/modes.js';
 import { addScore } from './streaks.js';
+import { hyp } from '../shared/geometry.js';
 
 const r2 = v => Math.round(v * 100) / 100;
 
@@ -51,7 +52,7 @@ export class CtfRules {
         f.x = c.ps.x; f.z = c.ps.z;
         // Home with it: scores only while the carrier's own flag stands at its base.
         const own = this.flags[c.team], base = this.bases[c.team];
-        if (own.state === 'home' && Math.hypot(c.ps.x - base.x, c.ps.z - base.z) <= CTF.reach) this._capture(f, c);
+        if (own.state === 'home' && hyp(c.ps.x - base.x, c.ps.z - base.z) <= CTF.reach) this._capture(f, c);
         continue;
       }
       if (f.state === 'dropped') {
@@ -72,7 +73,7 @@ export class CtfRules {
     let best = null, bestD = CTF.reach;
     for (const p of this.sim.players) {
       if (!p.alive || p.dummy || (team >= 0 && p.team !== team)) continue;
-      const d = Math.hypot(p.ps.x - x, p.ps.z - z);
+      const d = hyp(p.ps.x - x, p.ps.z - z);
       if (d <= bestD) { bestD = d; best = p; }
     }
     return best;
@@ -153,8 +154,8 @@ export class CtfRules {
     if (!enemy) return;
     const own = this.flags[killer.team];
     if (own.state === 'carried') return;
-    const near = Math.hypot(target.ps.x - own.x, target.ps.z - own.z) <= CTF.defend
-      || Math.hypot(killer.ps.x - own.x, killer.ps.z - own.z) <= CTF.defend;
+    const near = hyp(target.ps.x - own.x, target.ps.z - own.z) <= CTF.defend
+      || hyp(killer.ps.x - own.x, killer.ps.z - own.z) <= CTF.defend;
     if (!near) return;
     killer.flagDefends = (killer.flagDefends ?? 0) + 1;
     addScore(killer.score, CTF.score.defend);
@@ -165,7 +166,7 @@ export class CtfRules {
   // the enemy's): every point closer to the enemy base than to your own is ruled out in all but name.
   spawnFlow(p, s) {
     const own = this.bases[p.team], foe = this.bases[1 - p.team];
-    const dOwn = Math.hypot(s.x - own.x, s.z - own.z), dFoe = Math.hypot(s.x - foe.x, s.z - foe.z);
+    const dOwn = hyp(s.x - own.x, s.z - own.z), dFoe = hyp(s.x - foe.x, s.z - foe.z);
     return dFoe < dOwn ? -80 : 0;
   }
 

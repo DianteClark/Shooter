@@ -34,7 +34,7 @@ import { FFA_TEAM, MAX_HP, WEAPON_CATEGORY, WEAPON_IDS, GOLDEN_ID } from '../sha
 import { WEAPONS } from '../shared/weapons.js';
 import { LETHALS, TACTICALS } from '../shared/catalog.js';
 import { applyAttachments, availableFor, kitKey, NO_ATTACHMENTS, packKit, unpackKit, normalizeKit } from '../shared/attachments.js';
-import { resolveCircle, wallsInBox, wallScratch } from '../shared/geometry.js';
+import { resolveCircle, wallsInBox, wallScratch, hyp } from '../shared/geometry.js';
 import { botAttachments } from './bots.js';
 import { setSlot, stepPlayer } from './player.js';
 
@@ -223,7 +223,7 @@ export function planeAt(plane, f, out = { x: 0, z: 0 }) {
 
 // A gliding player: the stick steers at BR.glideSpeed, nothing collides, and the map edge holds you in.
 export function glideStep(ps, mx, mz, dt, map) {
-  const len = Math.hypot(mx, mz);
+  const len = hyp(mx, mz);
   const k = len > 1 ? 1 / len : 1;
   ps.vx = mx * k * BR.glideSpeed; ps.vz = mz * k * BR.glideSpeed;
   ps.x = Math.max(2, Math.min(map.width - 2, ps.x + ps.vx * dt));
@@ -275,7 +275,7 @@ export function flightLine(W, H, a, u, lane, pois = []) {
   for (const b of LANE_BANDS) { acc += b[0]; if (lane < acc) { band = b; break; } }
   const side = u < 0.5 ? -1 : 1, v = (u < 0.5 ? u : u - 0.5) * 2;
   let off = side * (band[1] + (band[2] - band[1]) * v) * W;
-  const ca = Math.cos(a), sa = Math.sin(a), half = Math.hypot(W, H) / 2 + BR.planeOver;
+  const ca = Math.cos(a), sa = Math.sin(a), half = hyp(W, H) / 2 + BR.planeOver;
   const need = Math.min(pois.length, Math.max(4, Math.ceil(pois.length * 0.4)));
   for (let i = 0; i < 12; i++) {
     const cx = W / 2 - sa * off, cz = H / 2 + ca * off;
@@ -311,14 +311,14 @@ export function reboundArea(map, seed) {
   for (let x = R; x <= map.width - R + 0.1; x += 20) {
     for (let z = R; z <= map.height - R + 0.1; z += 20) {
       let s = 0;
-      for (const q of pois) if (Math.hypot(q.x - x, q.z - z) < R - 12) s += q.tier === 1 ? 3 : q.tier === 2 ? 2 : 1;
+      for (const q of pois) if (hyp(q.x - x, q.z - z) < R - 12) s += q.tier === 1 ? 3 : q.tier === 2 ? 2 : 1;
       cands.push({ x, z, s });
     }
   }
   cands.sort((a, b) => b.s - a.s || a.x - b.x || a.z - b.z);
   // The four best, kept 60 m apart so the pick is a real choice of region.
   const top = [];
-  for (const c of cands) { if (top.every(t => Math.hypot(t.x - c.x, t.z - c.z) >= 60)) top.push(c); if (top.length === 4) break; }
+  for (const c of cands) { if (top.every(t => hyp(t.x - c.x, t.z - c.z) >= 60)) top.push(c); if (top.length === 4) break; }
   const pick = top[Math.floor(mulberry32((seed ^ 0x5eb0d) >>> 0)() * top.length)] ?? { x: map.width / 2, z: map.height / 2 };
   return { x: pick.x, z: pick.z, r: R };
 }
@@ -328,18 +328,18 @@ export function reboundArea(map, seed) {
 // place's nearest outdoor loot spot (open, walkable ground). Pure: every phone gets the same beacons from the map and area.
 export function recallBeacons(map, area = null) {
   const cfg = area ? RB.recall : BR.recall, pois = map.br?.pois ?? [], loot = map.br?.loot ?? [];
-  const inArea = q => !area || Math.hypot(q.x - area.x, q.z - area.z) < area.r - 14;
+  const inArea = q => !area || hyp(q.x - area.x, q.z - area.z) < area.r - 14;
   let cands = pois.filter(q => inArea(q) && q.tier >= 2);
   if (cands.length < cfg.count) cands = pois.filter(inArea);
   cands = cands.slice().sort((a, b) => (a.id < b.id ? -1 : 1));
   if (!cands.length) return [];
   const cx = area?.x ?? map.width / 2, cz = area?.z ?? map.height / 2;
-  const picked = [cands.reduce((m, q) => (Math.hypot(q.x - cx, q.z - cz) < Math.hypot(m.x - cx, m.z - cz) ? q : m))];
+  const picked = [cands.reduce((m, q) => (hyp(q.x - cx, q.z - cz) < hyp(m.x - cx, m.z - cz) ? q : m))];
   while (picked.length < cfg.count) {
     let best = null, bestD = cfg.gap;
     for (const q of cands) {
       if (picked.includes(q)) continue;
-      const d = Math.min(...picked.map(o => Math.hypot(o.x - q.x, o.z - q.z)));
+      const d = Math.min(...picked.map(o => hyp(o.x - q.x, o.z - q.z)));
       if (d >= bestD) { bestD = d; best = q; }
     }
     if (!best) break;
@@ -347,7 +347,7 @@ export function recallBeacons(map, area = null) {
   }
   return picked.map((q, i) => {
     let at = null, bd = (q.r ?? 20) + 12;
-    for (const l of loot) { if (l.indoor) continue; const d = Math.hypot(l.x - q.x, l.z - q.z); if (d < bd) { bd = d; at = l; } }
+    for (const l of loot) { if (l.indoor) continue; const d = hyp(l.x - q.x, l.z - q.z); if (d < bd) { bd = d; at = l; } }
     return { id: i, x: at ? at.x : q.x, z: at ? at.z : q.z, poi: q.id, name: q.name };
   });
 }
@@ -397,10 +397,10 @@ export class BrRules {
       const a = rng() * Math.PI * 2, u = rng();
       ({ from, to } = flightLine(W, H, a, u, mulberry32((seed ^ 0x2f1a5c) >>> 0)(), def.pois ?? []));
     }
-    this.plane = { fx: from.x, fz: from.z, tx: to.x, tz: to.z, len: Math.hypot(to.x - from.x, to.z - from.z), f: 0 };
+    this.plane = { fx: from.x, fz: from.z, tx: to.x, tz: to.z, len: hyp(to.x - from.x, to.z - from.z), f: 0 };
     this.t = 0;                      // Seconds since the transport set off.
     // Circle: starts around the whole map, shrinks phase by phase toward centres chosen as it goes (host).
-    const R0 = Math.hypot(W, H) / 2 + 6;
+    const R0 = hyp(W, H) / 2 + 6;
     this.circle = this.area ? { ...this.area } : { x: W / 2, z: H / 2, r: R0 };
     this.from = { ...this.circle };
     this.next = { x: this.circle.x, z: this.circle.z, r: this.phR[0] };
@@ -546,7 +546,7 @@ export class BrRules {
     for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) {
       const cell = this.grid.get(i * 4096 + j);
       if (!cell) continue;
-      for (const it of cell) if (Math.hypot(it.x - x, it.z - z) <= r) out.push(it);
+      for (const it of cell) if (hyp(it.x - x, it.z - z) <= r) out.push(it);
     }
     return out;
   }
@@ -642,7 +642,7 @@ export class BrRules {
       case 'take': {
         if (p.brAir || p.downed) return false;
         const it = this.items[msg.item | 0];
-        if (!it || it.kind !== K.gun || Math.hypot(it.x - p.ps.x, it.z - p.ps.z) > BR.take + 0.8) return false;
+        if (!it || it.kind !== K.gun || hyp(it.x - p.ps.x, it.z - p.ps.z) > BR.take + 0.8) return false;
         this._takeGun(p, it, msg.slot);
         return true;
       }
@@ -772,7 +772,7 @@ export class BrRules {
       }
       // The circle.
       const c = this.circle;
-      if (Math.hypot(p.ps.x - c.x, p.ps.z - c.z) > c.r) {
+      if (hyp(p.ps.x - c.x, p.ps.z - c.z) > c.r) {
         p.hp -= outside * dt * (p.downed ? 1.5 : 1);
         p.regenT = Math.max(p.regenT, 1);
         if (p.hp <= 0) { this._die(p, p.downed ? this._downer(p) : null, p.downed ? b.downWeapon : null, 'zone'); continue; }
@@ -793,7 +793,7 @@ export class BrRules {
   }
 
   _inMap(pos) {
-    if (this.area && Math.hypot(pos.x - this.area.x, pos.z - this.area.z) > this.area.r - 6) return false;
+    if (this.area && hyp(pos.x - this.area.x, pos.z - this.area.z) > this.area.r - 6) return false;
     return pos.x > 8 && pos.z > 8 && pos.x < this.sim.map.width - 8 && pos.z < this.sim.map.height - 8;
   }
 
@@ -820,7 +820,7 @@ export class BrRules {
     for (const q of sim.players) {
       if (q === p || q.team !== p.team || !q.alive) continue;
       let foes = 0;
-      for (const e of sim.players) if (e.alive && e.team !== q.team && Math.hypot(e.ps.x - q.ps.x, e.ps.z - q.ps.z) < 35) foes++;
+      for (const e of sim.players) if (e.alive && e.team !== q.team && hyp(e.ps.x - q.ps.x, e.ps.z - q.ps.z) < 35) foes++;
       const s = foes * 10 + (q.brAir ? 5 : 0) + (q.downed ? 3 : 0) + rng();      // A downed mate will do: land and pick them up.
       if (s < best) { best = s; mate = q; }
     }
@@ -834,13 +834,13 @@ export class BrRules {
     for (let i = 0; i < 6 && !land; i++) {
       const ai = a + i * Math.PI / 3;
       let lx = mate.ps.x + Math.cos(ai) * r, lz = mate.ps.z + Math.sin(ai) * r;
-      const dc = Math.hypot(lx - c.x, lz - c.z);
+      const dc = hyp(lx - c.x, lz - c.z);
       if (dc > c.r * 0.9 && dc > 1) { const k = (c.r * 0.9) / dc; lx = c.x + (lx - c.x) * k; lz = c.z + (lz - c.z) * k; }
       const w = this._walkable(lx, lz);
       first ??= w;
-      if (Math.hypot(w.x - mate.ps.x, w.z - mate.ps.z) <= 14) land = w;
+      if (hyp(w.x - mate.ps.x, w.z - mate.ps.z) <= 14) land = w;
     }
-    land ??= Math.hypot(mate.ps.x - c.x, mate.ps.z - c.z) < c.r * 0.9 ? this._walkable(mate.ps.x, mate.ps.z) : first;
+    land ??= hyp(mate.ps.x - c.x, mate.ps.z - c.z) < c.r * 0.9 ? this._walkable(mate.ps.x, mate.ps.z) : first;
     const W = sim.map.width, H = sim.map.height, b0 = rng() * Math.PI * 2;
     const sx = Math.max(4, Math.min(W - 4, land.x + Math.cos(b0) * 40)), sz = Math.max(4, Math.min(H - 4, land.z + Math.sin(b0) * 40));
     this._dropIn(p, land, sx, sz);
@@ -899,7 +899,7 @@ export class BrRules {
     let best = null, bd = reach;
     for (const b of this.beacons) {
       if (b.used || b.user) continue;
-      const d = Math.hypot(b.x - x, b.z - z);
+      const d = hyp(b.x - x, b.z - z);
       if (d <= bd) { bd = d; best = b; }
     }
     return best;
@@ -911,7 +911,7 @@ export class BrRules {
     const who = this._tagFor(p);
     if (who < 0) return false;
     const bc = Number.isInteger(bi) && this.beacons[bi] && !this.beacons[bi].used && !this.beacons[bi].user
-      && Math.hypot(this.beacons[bi].x - p.ps.x, this.beacons[bi].z - p.ps.z) <= BR.recall.reach + 0.6 ? this.beacons[bi] : this._beaconAt(p.ps.x, p.ps.z);
+      && hyp(this.beacons[bi].x - p.ps.x, this.beacons[bi].z - p.ps.z) <= BR.recall.reach + 0.6 ? this.beacons[bi] : this._beaconAt(p.ps.x, p.ps.z);
     if (!bc) return false;
     bc.user = p.id; bc.k = 0;
     b.recall = { b: bc.id, t: 0, who };
@@ -922,7 +922,7 @@ export class BrRules {
   // Holding it: in reach of the beacon, not shooting, not hit, not down (those stop it; see absorb, onShot, tryDown).
   _stepRecall(p, dt) {
     const r = p.br.recall, bc = this.beacons[r.b], q = this.sim.players[r.who];
-    if (!bc || Math.hypot(bc.x - p.ps.x, bc.z - p.ps.z) > BR.recall.reach + 0.6) { this._recallStop(p, 'left'); return; }
+    if (!bc || hyp(bc.x - p.ps.x, bc.z - p.ps.z) > BR.recall.reach + 0.6) { this._recallStop(p, 'left'); return; }
     if (!this._recallable(q)) { this._recallStop(p, 'gone'); return; }
     r.t += dt;
     bc.k = Math.min(1, r.t / BR.recall.time);
@@ -961,11 +961,11 @@ export class BrRules {
       if (!it || it.kind !== K.tag) continue;
       const q = sim.players[it.v];
       if (!this._recallable(q)) { this._removeItem(it); continue; }
-      if (Math.hypot(it.x - c.x, it.z - c.z) <= c.r) continue;
+      if (hyp(it.x - c.x, it.z - c.z) <= c.r) continue;
       let best = null, bd = Infinity;
       for (const m of sim.players) {
         if (m.team !== q.team || !m.alive || m.downed || m.brAir || !m.br) continue;
-        const d = Math.hypot(m.ps.x - it.x, m.ps.z - it.z);
+        const d = hyp(m.ps.x - it.x, m.ps.z - it.z);
         if (d < bd) { bd = d; best = m; }
       }
       if (!best) continue;
@@ -1045,7 +1045,7 @@ export class BrRules {
     const sim = this.sim, W = sim.map.width, H = sim.map.height, rng = sim.rng;
     const r = this.phR[this.phase];
     const cur = this.circle;
-    const room = Math.max(0, Math.min(cur.r, Math.hypot(W, H) / 2) - r);
+    const room = Math.max(0, Math.min(cur.r, hyp(W, H) / 2) - r);
     let best = null, bestScore = -Infinity;
     for (let i = 0; i < 14; i++) {
       const a = rng() * Math.PI * 2, d = Math.sqrt(rng()) * room;
@@ -1053,9 +1053,9 @@ export class BrRules {
       // The map edge: the circle's centre stays inside it, with a margin while circles are big.
       const m = Math.min(r * 0.6, W * 0.2);
       x = Math.max(m, Math.min(W - m, x)); z = Math.max(m, Math.min(H - m, z));
-      if (Math.hypot(x - cur.x, z - cur.z) > room + 1) continue;
+      if (hyp(x - cur.x, z - cur.z) > room + 1) continue;
       let score = rng() * 2;
-      for (const b of this.def.circleBias ?? []) score += (b.w ?? 1) * Math.exp(-Math.hypot(b.x - x, b.z - z) / Math.max(30, r));
+      for (const b of this.def.circleBias ?? []) score += (b.w ?? 1) * Math.exp(-hyp(b.x - x, b.z - z) / Math.max(30, r));
       if (sim.nav && !sim.nav.isWalkable(x, z)) score -= 1.5;
       if (score > bestScore) { bestScore = score; best = { x, z }; }
     }
@@ -1118,8 +1118,8 @@ export class BrRules {
     let helper = null;
     for (const q of sim.players) {
       if (q === p || q.team !== p.team || !q.alive || q.downed || q.brAir) continue;
-      if (Math.hypot(q.ps.x - p.ps.x, q.ps.z - p.ps.z) > BR.reviveReach) continue;
-      if (q.ps.firingT > 1.2 || Math.hypot(q.ps.vx, q.ps.vz) > 2.6) continue;
+      if (hyp(q.ps.x - p.ps.x, q.ps.z - p.ps.z) > BR.reviveReach) continue;
+      if (q.ps.firingT > 1.2 || hyp(q.ps.vx, q.ps.vz) > 2.6) continue;
       helper = q; break;
     }
     if (helper) {
@@ -1145,7 +1145,7 @@ export class BrRules {
     p.downed = false;
     if (cause === 'zone') this.zoneDeaths = (this.zoneDeaths ?? 0) + 1;    // Counted for the pacing test (dev/sim-br.mjs).
     if (killer && killer !== p && killer.alive !== undefined) {
-      sim._kill(p, killer, weapon ?? killer.ps.weapon, Math.hypot(killer.ps.x - p.ps.x, killer.ps.z - p.ps.z), null, false, null);
+      sim._kill(p, killer, weapon ?? killer.ps.weapon, hyp(killer.ps.x - p.ps.x, killer.ps.z - p.ps.z), null, false, null);
     } else sim._selfKill(p, cause);
   }
 
@@ -1233,7 +1233,7 @@ export class BrRules {
     if (b && b.useK && b.useK !== 'self') b.useK = null;
     if (b?.recall) this._recallStop(p, 'shot');
     const last = this.noise[this.noise.length - 1];
-    if (!last || last.team !== p.team || this.sim.time - last.t > 0.5 || Math.hypot(last.x - p.ps.x, last.z - p.ps.z) > 20) {
+    if (!last || last.team !== p.team || this.sim.time - last.t > 0.5 || hyp(last.x - p.ps.x, last.z - p.ps.z) > 20) {
       this.noise.push({ x: p.ps.x, z: p.ps.z, t: this.sim.time, team: p.team });
     }
   }
@@ -1270,7 +1270,7 @@ export class BrRules {
     const list = this.near(p.ps.x, p.ps.z, Math.max(BR.pickup, BR.chestReach), this._near || (this._near = []));
     for (const it of list) {
       if (this.items[it.id] !== it) continue;
-      const d = Math.hypot(it.x - p.ps.x, it.z - p.ps.z);
+      const d = hyp(it.x - p.ps.x, it.z - p.ps.z);
       if (it.kind === K.chest) { if (d <= BR.chestReach) this._openChest(it); continue; }
       if (d > BR.pickup) continue;
       this._autoPick(p, it);
@@ -1343,7 +1343,7 @@ export class BrRules {
   }
 
   _humanMateNear(p, x, z, r) {
-    for (const q of this.sim.players) if (q !== p && !q.isBot && q.team === p.team && q.alive && Math.hypot(q.ps.x - x, q.ps.z - z) < r) return true;
+    for (const q of this.sim.players) if (q !== p && !q.isBot && q.team === p.team && q.alive && hyp(q.ps.x - x, q.ps.z - z) < r) return true;
     return false;
   }
 
@@ -1452,9 +1452,9 @@ export class BrRules {
       // steering is followed in broad strokes, never copied stroke for stroke.
       if (lead && lead.alive && lead.brAir === 2 && !lead.away) {
         const sx = lead.ps.x + b.offX, sz = lead.ps.z + b.offZ;
-        if (Math.hypot(sx - b.dropX, sz - b.dropZ) > SLOT_SLACK) { b.dropX = sx; b.dropZ = sz; }
+        if (hyp(sx - b.dropX, sz - b.dropZ) > SLOT_SLACK) { b.dropX = sx; b.dropZ = sz; }
       }
-      const dx = b.dropX - p.ps.x, dz = b.dropZ - p.ps.z, d = Math.hypot(dx, dz);
+      const dx = b.dropX - p.ps.x, dz = b.dropZ - p.ps.z, d = hyp(dx, dz);
       glideStep(p.ps, d > 1.5 ? dx / d : 0, d > 1.5 ? dz / d : 0, dt, this.sim.map);
       return true;
     }
@@ -1463,7 +1463,7 @@ export class BrRules {
       let best = null, bestD = 40;
       for (const q of this.sim.players) {
         if (q === p || q.team !== p.team || !q.alive || q.downed || q.brAir) continue;
-        const d = Math.hypot(q.ps.x - p.ps.x, q.ps.z - p.ps.z);
+        const d = hyp(q.ps.x - p.ps.x, q.ps.z - p.ps.z);
         if (d < bestD) { bestD = d; best = q; }
       }
       const I = this._downIn || (this._downIn = { mx: 0, mz: 0, aim: 0, aiming: false, fire: false, sprint: false, slide: false, swap: false, tactical: false, lethal: false, streak: -1 });
@@ -1524,9 +1524,9 @@ export class BrRules {
         const t = ((c.x - plane.fx) * dx + (c.z - plane.fz) * dz);
         const off = Math.abs((c.x - plane.fx) * dz - (c.z - plane.fz) * dx);
         let near = 0;
-        for (const q of picks) { const d = Math.hypot(q.x - c.x, q.z - c.z); near = Math.max(near, Math.exp(-(d * d) / (gap * gap))); }
+        for (const q of picks) { const d = hyp(q.x - c.x, q.z - c.z); near = Math.max(near, Math.exp(-(d * d) / (gap * gap))); }
         // A hot drop joins one other squad at a tier 1 place, never a third.
-        const crowd = picks.filter(q => Math.hypot(q.x - c.x, q.z - c.z) < 30).length;
+        const crowd = picks.filter(q => hyp(q.x - c.x, q.z - c.z) < 30).length;
         const spread = hot && crowd < 2 ? (c.tier === 1 ? 1 + near : 0.1) : (1 - 0.97 * near) * (crowd ? 0.05 : 1);
         const w = (c.tier === 1 ? 3 : c.tier === 2 ? 2 : 1.2) * spread * Math.exp(-off / 140) * (0.4 + rng()) * (t > 20 && t < plane.len - 20 ? 1 : 0.2);
         if (w > bestW) { bestW = w; best = c; }
@@ -1550,7 +1550,7 @@ export class BrRules {
   // Where squads may land: the named places, and for duos and solos also loot spots between them (each tied to its
   // nearest place for the loot run that follows).
   _dropCands(rng) {
-    const A = this.area, inArea = q => !A || Math.hypot(q.x - A.x, q.z - A.z) < A.r - 8;     // Rebound: its area only.
+    const A = this.area, inArea = q => !A || hyp(q.x - A.x, q.z - A.z) < A.r - 8;     // Rebound: its area only.
     const pois = (this.def.pois ?? []).filter(inArea);
     const out = pois.map(poi => ({ x: poi.x, z: poi.z, r: poi.r, tier: poi.tier, id: poi.id, poi }));
     if (this.squad <= 2 || (A && out.length < 8)) {
@@ -1558,7 +1558,7 @@ export class BrRules {
       for (let i = 0; i < 40 && loot.length; i++) {
         const s = loot[Math.floor(rng() * loot.length)];
         let poi = null, bd = Infinity;
-        for (const q of pois) { const d = Math.hypot(q.x - s.x, q.z - s.z); if (d < bd) { bd = d; poi = q; } }
+        for (const q of pois) { const d = hyp(q.x - s.x, q.z - s.z); if (d < bd) { bd = d; poi = q; } }
         if (!poi) continue;
         out.push({ x: s.x, z: s.z, r: 8, tier: Math.min(3, s.tier + 1), id: `spot${i}`, poi: { id: `spot:${poi.id}:${i}`, x: s.x, z: s.z, r: 16, tier: s.tier } });
       }
@@ -1583,14 +1583,14 @@ export class BrRules {
     const anchor = lead ?? bots[0];
     // Circle timing: how long until the edge reaches us, and how long the walk in takes.
     const ax = anchor.ps.x, az = anchor.ps.z;
-    const toNext = Math.hypot(ax - n.x, az - n.z) - n.r * 0.7;
+    const toNext = hyp(ax - n.x, az - n.z) - n.r * 0.7;
     const walk = Math.max(0, toNext) / 5 + 10;
-    const outsideNow = Math.hypot(ax - c.x, az - c.z) > c.r - 6;
+    const outsideNow = hyp(ax - c.x, az - c.z) > c.r - 6;
     // Late rotators (plan.late near 1) leave it until the shrink is under way; the rest move with time to spare.
     const late = plan.late ?? 0.5;
     // The first circle hurts so little that nobody leaves good loot for it before it moves.
     // While it shrinks, a squad moves once the edge comes near (they stagger as it sweeps across the map).
-    const closing = this.phase === 0 ? Math.hypot(ax - c.x, az - c.z) > c.r - 25 : (this.state === 'shrink' && (late < 0.75 || toNext > n.r * 0.4)) || this.timer < walk * (1.3 - late) + 8 * (1 - late);
+    const closing = this.phase === 0 ? hyp(ax - c.x, az - c.z) > c.r - 25 : (this.state === 'shrink' && (late < 0.75 || toNext > n.r * 0.4)) || this.timer < walk * (1.3 - late) + 8 * (1 - late);
     const geared = bots.every(p => this._geared(p));
     let kind = 'loot';
     // A greedy squad (late, from phase 1) shrugs the circle off until it starts to hurt; sometimes it leaves it too late.
@@ -1611,8 +1611,8 @@ export class BrRules {
         const s = this.noise[i];
         if (s.team === team || s.weighed?.has(team)) continue;
         (s.weighed || (s.weighed = new Set())).add(team);
-        const d = Math.hypot(s.x - ax, s.z - az);
-        if (d > 18 && d < reach && Math.hypot(s.x - n.x, s.z - n.z) < n.r + 10 && sim.rng() < join) { fight = s; break; }
+        const d = hyp(s.x - ax, s.z - az);
+        if (d > 18 && d < reach && hyp(s.x - n.x, s.z - n.z) < n.r + 10 && sim.rng() < join) { fight = s; break; }
       }
     }
     plan.fight = fight;
@@ -1625,12 +1625,12 @@ export class BrRules {
       // In at the near edge, not the middle: squads coming from all sides do not all meet in the centre.
       plan.spot = this._walkable(n.x + Math.cos(a) * n.r * 0.7, n.z + Math.sin(a) * n.r * 0.7);
       plan.circle = this.phase;
-    } else if (kind === 'hold' && (!plan.spot || (plan.circle !== this.phase && Math.hypot(plan.spot.x - n.x, plan.spot.z - n.z) > n.r * 0.8))) {
+    } else if (kind === 'hold' && (!plan.spot || (plan.circle !== this.phase && hyp(plan.spot.x - n.x, plan.spot.z - n.z) > n.r * 0.8))) {
       // A squad holds where it is while that stays inside the next circle: it does not wander between holds.
       plan.spot = this._holdSpot(n, ax, az, (plan.late ?? 0) > 0.65 ? EDGE_RING : 0.62, team);
       plan.circle = this.phase; plan.since = sim.time;
     } else if (kind === 'fight') {
-      const d = Math.hypot(fight.x - ax, fight.z - az);
+      const d = hyp(fight.x - ax, fight.z - az);
       plan.spot = this._walkable(fight.x + (ax - fight.x) / d * 16, fight.z + (az - fight.z) / d * 16);
     }
 
@@ -1648,7 +1648,7 @@ export class BrRules {
         // No regen in BR: a medkit is the only heal. Badly hurt, it comes before plates; otherwise plates first, then a
         // medkit once enough health is missing to be worth one (sooner with spares in the pack).
         // (A greedy squad sitting in the circle's damage does not think to heal until it heads in.)
-        const heal = b.meds > 0 && p.hp < MAX_HP && !(shrugs && kind !== 'rotate' && Math.hypot(p.ps.x - c.x, p.ps.z - c.z) > c.r)
+        const heal = b.meds > 0 && p.hp < MAX_HP && !(shrugs && kind !== 'rotate' && hyp(p.ps.x - c.x, p.ps.z - c.z) > c.r)
           && p.hp < HEAL_BELOW[Math.min(b.meds, HEAL_BELOW.length - 1)];
         if (heal && p.hp < 45) this._startUse(p, 'med');
         else if (b.plates > 0 && b.armor <= (BR.plateSlots - 1) * BR.plateHp) this._startUse(p, 'plate');
@@ -1656,7 +1656,7 @@ export class BrRules {
       }
       // A teammate down nearby comes first, unless there is a fight in view.
       const mate = downed.length && !bot.targetVisible ? downed.reduce((m, q) => {
-        const d = Math.hypot(q.ps.x - p.ps.x, q.ps.z - p.ps.z);
+        const d = hyp(q.ps.x - p.ps.x, q.ps.z - p.ps.z);
         return d < 50 && (!m || d < m.d) ? { q, d } : m;
       }, null) : null;
       if (mate && (!this._reviverFor(mate.q, p) || this._reviverFor(mate.q, p) === p)) {
@@ -1670,11 +1670,11 @@ export class BrRules {
       // A human leads: stay in reach of them, looting what is around, as a squadmate would (not a shadow: no copying
       // their moves or their aim).
       if (lead && kind !== 'rotate') {
-        const dl = Math.hypot(lead.ps.x - p.ps.x, lead.ps.z - p.ps.z);
+        const dl = hyp(lead.ps.x - p.ps.x, lead.ps.z - p.ps.z);
         const near = dl < LEAD_LEASH ? this._lootTarget(p, LEAD_LOOT, lead.ps.x, lead.ps.z) : null;
         if (near) { bot.setObjective(near); continue; }
         // A spot round the human, kept until the human has moved on; the bot watches its own side of the squad.
-        if (!b.with || Math.hypot(lead.ps.x - b.with.lx, lead.ps.z - b.with.lz) > WITH_REPICK) {
+        if (!b.with || hyp(lead.ps.x - b.with.lx, lead.ps.z - b.with.lz) > WITH_REPICK) {
           const a = (i / bots.length) * Math.PI * 2 + (sim.rng() - 0.5) * 0.9, r = 5 + sim.rng() * 4;
           const at = this._walkable(lead.ps.x + Math.cos(a) * r, lead.ps.z + Math.sin(a) * r);
           b.with = { x: at.x, z: at.z, lx: lead.ps.x, lz: lead.ps.z, aim: a, n: (b.with?.n ?? 0) + 1 };
@@ -1727,20 +1727,20 @@ export class BrRules {
     if (this._tagFor(p) >= 0) {
       let best = null, bd = lead ? 45 : 170;
       for (const bc of this.beacons) {
-        if (bc.used || bc.user || Math.hypot(bc.x - c.x, bc.z - c.z) > c.r - 4) continue;
-        const d = Math.hypot(bc.x - ox, bc.z - oz);
+        if (bc.used || bc.user || hyp(bc.x - c.x, bc.z - c.z) > c.r - 4) continue;
+        const d = hyp(bc.x - ox, bc.z - oz);
         if (d < bd) { bd = d; best = bc; }
       }
       if (!best) return null;
-      if (Math.hypot(best.x - p.ps.x, best.z - p.ps.z) <= BR.recall.reach - 0.4 && !bot.targetVisible && !b.useK) this._recallStart(p, best.id);
+      if (hyp(best.x - p.ps.x, best.z - p.ps.z) <= BR.recall.reach - 0.4 && !bot.targetVisible && !b.useK) this._recallStart(p, best.id);
       return { key: `beacon:${best.id}`, role: 'collect', x: best.x, z: best.z, r: 0.5, commit: true };
     }
     let best = null, bd = lead ? 30 : 160;
     for (const it of tags) {
       const claim = this.claims.get(it.id);
       if (claim && claim.bot !== p.id && claim.until > sim.time) continue;
-      if (Math.hypot(it.x - c.x, it.z - c.z) > c.r) continue;
-      const d = Math.hypot(it.x - ox, it.z - oz);
+      if (hyp(it.x - c.x, it.z - c.z) > c.r) continue;
+      const d = hyp(it.x - ox, it.z - oz);
       if (d < bd) { bd = d; best = it; }
     }
     if (!best) return null;
@@ -1765,24 +1765,24 @@ export class BrRules {
     // Not on top of another squad's hold: squads spread round the circle instead of meeting at the same few rooms.
     const others = [];
     for (const [t, pl] of this.plans) if (t !== team && pl.kind === 'hold' && pl.spot) others.push(pl.spot);
-    const crowd = (x, z) => { let k = 0; for (const o of others) { const d = Math.hypot(o.x - x, o.z - z); if (d < HOLD_GAP) k += (HOLD_GAP - d) * 0.25; } return k; };
+    const crowd = (x, z) => { let k = 0; for (const o of others) { const d = hyp(o.x - x, o.z - z); if (d < HOLD_GAP) k += (HOLD_GAP - d) * 0.25; } return k; };
     const early = this.phase === 0 && this.state === 'wait';     // The first circle is far off: settle in where you are.
     let best = null, bestS = -Infinity;
     for (const r of rooms) {
       const x = r.x + r.w / 2, z = r.z + r.d / 2;
-      const dc = Math.hypot(x - n.x, z - n.z);
-      if ((dc > n.r * Math.max(0.85, ringK + 0.1) || Math.hypot(x - c.x, z - c.z) > c.r * 0.9) && !early) continue;
+      const dc = hyp(x - n.x, z - n.z);
+      if ((dc > n.r * Math.max(0.85, ringK + 0.1) || hyp(x - c.x, z - c.z) > c.r * 0.9) && !early) continue;
       // Late on, a ring inside the edge on our side rather than the middle, where every squad would meet.
       const ring = this.phase >= 1 ? Math.abs(dc / Math.max(1, n.r) - ringK) * 8 : 0;
-      const s = -Math.hypot(x - ax, z - az) * 0.12 - ring - crowd(x, z) + sim.rng() * 2;
+      const s = -hyp(x - ax, z - az) * 0.12 - ring - crowd(x, z) + sim.rng() * 2;
       if (s > bestS) { bestS = s; best = { x, z }; }
     }
     if (!best) {
       const ix = sim.nav.holdIndex, k = ix.near(n.x, n.z, Math.max(10, n.r * Math.max(0.8, ringK + 0.12)));
       for (let q = 0; q < k; q++) {
         const h = sim.nav.holds[ix.out[q]];
-        const ring = this.phase >= 1 ? Math.abs(Math.hypot(h.x - n.x, h.z - n.z) / Math.max(1, n.r) - ringK) * 8 : 0;
-        const s = -Math.hypot(h.x - ax, h.z - az) * 0.12 - ring - crowd(h.x, h.z) + sim.rng() * 2;
+        const ring = this.phase >= 1 ? Math.abs(hyp(h.x - n.x, h.z - n.z) / Math.max(1, n.r) - ringK) * 8 : 0;
+        const s = -hyp(h.x - ax, h.z - az) * 0.12 - ring - crowd(h.x, h.z) + sim.rng() * 2;
         if (s > bestS) { bestS = s; best = { x: h.x, z: h.z }; }
       }
     }
@@ -1793,12 +1793,12 @@ export class BrRules {
   _nextPoi(team, x, z, n, visited, maxD = Infinity) {
     let best = null, bestS = -Infinity;
     for (const poi of this.def.pois ?? []) {
-      const d = Math.hypot(poi.x - x, poi.z - z);
-      if (Math.hypot(poi.x - n.x, poi.z - n.z) > n.r + 20 || visited?.has(poi.id) || d > maxD) continue;
+      const d = hyp(poi.x - x, poi.z - z);
+      if (hyp(poi.x - n.x, poi.z - n.z) > n.r + 20 || visited?.has(poi.id) || d > maxD) continue;
       let others = 0;
       for (const [t, pl] of this.plans) if (t !== team && pl.poi === poi) others++;
       // Somebody is there already (any enemy within the place): a looting squad goes elsewhere.
-      for (const q of this.sim.players) if (q.alive && q.team !== team && !q.brAir && Math.hypot(q.ps.x - poi.x, q.ps.z - poi.z) < poi.r + 20) { others++; break; }
+      for (const q of this.sim.players) if (q.alive && q.team !== team && !q.brAir && hyp(q.ps.x - poi.x, q.ps.z - poi.z) < poi.r + 20) { others++; break; }
       const s = -d + (poi.tier === 1 ? 25 : 0) - others * 80 + this.sim.rng() * 30;
       if (s > bestS) { bestS = s; best = poi; }
     }
@@ -1815,7 +1815,7 @@ export class BrRules {
       if (claim && claim.bot !== p.id && claim.until > sim.time) continue;
       if (!this._wants(p, it)) continue;
       // Hurt with no medkit: one is worth a detour (health does not come back by itself in BR).
-      const d = Math.hypot(it.x - p.ps.x, it.z - p.ps.z) - (it.kind === K.chest ? 12 : it.kind === K.gun ? 4 : it.kind === K.med && !b.meds && p.hp < 75 ? 10 : 0);
+      const d = hyp(it.x - p.ps.x, it.z - p.ps.z) - (it.kind === K.chest ? 12 : it.kind === K.gun ? 4 : it.kind === K.med && !b.meds && p.hp < 75 ? 10 : 0);
       if (d < bestD) { bestD = d; best = it; }
     }
     if (!best) return null;
@@ -2059,7 +2059,7 @@ export class BrRules {
     }
     this.plane.f = f / 1000;
     this.plane.fx = fx; this.plane.fz = fz; this.plane.tx = tx; this.plane.tz = tz;
-    this.plane.len = Math.hypot(tx - fx, tz - fz) || 1;
+    this.plane.len = hyp(tx - fx, tz - fz) || 1;
     this.circle = { x: cx / 10, z: cz / 10, r: cr / 10 };
     this.next = { x: nx / 10, z: nz / 10, r: nr / 10 };
     this.phase = phase; this.state = state === 0 ? 'wait' : state === 1 ? 'shrink' : 'final'; this.timer = timer / 10;
@@ -2153,7 +2153,7 @@ export function takeable(view, me) {
     if (!it || it.kind !== K.gun) continue;
     const dx = it.x - me.x, dz = it.z - me.z;
     if (dx > bestD || dx < -bestD || dz > bestD || dz < -bestD) continue;
-    const d = Math.hypot(dx, dz);
+    const d = hyp(dx, dz);
     if (d < bestD) { bestD = d; best = it; }
   }
   return best;

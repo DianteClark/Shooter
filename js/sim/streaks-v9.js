@@ -20,7 +20,7 @@
 
 import { SCORE, STREAKS } from '../shared/catalog.js';
 import { PLAYER_RADIUS, SIM_HZ } from '../shared/constants.js';
-import { hasLineOfSight, raycastMap, rayCircle } from '../shared/geometry.js';
+import { hasLineOfSight, raycastMap, rayCircle, hyp } from '../shared/geometry.js';
 import { WEAPONS } from '../shared/weapons.js';
 import { addScore } from './streaks.js';
 import { EQUIPMENT } from './equipment.js';
@@ -182,7 +182,7 @@ function sweepPulse(sim, s) {
   for (let i = 0; i < sim.players.length; i++) {
     const q = sim.players[i];
     if (q.team === s.team || !q.alive || q.dummy || q.ps.perks.includes('ghost')) continue;
-    if (Math.hypot(q.ps.x - x, q.ps.z - z) > SWEEP_R) continue;
+    if (hyp(q.ps.x - x, q.ps.z - z) > SWEEP_R) continue;
     sim._onEqEvent({ t: 'marked', id: q.id, by: o.id, dur: SWEEP_MARK, kind: 'sweep' });
   }
 }
@@ -217,7 +217,7 @@ function callPlates(sim, p) {
   emitStreak(sim, p, 'plates');
   for (let i = 0; i < sim.players.length; i++) {
     const q = sim.players[i];
-    if (q.team !== p.team || !q.alive || Math.hypot(q.ps.x - p.ps.x, q.ps.z - p.ps.z) > PLATE_RADIUS) continue;
+    if (q.team !== p.team || !q.alive || hyp(q.ps.x - p.ps.x, q.ps.z - p.ps.z) > PLATE_RADIUS) continue;
     q.plates = PLATES;
     sim._emit({ t: 'plates', id: q.id, by: p.id });
   }
@@ -278,7 +278,7 @@ function commitLine(sim, p, path) {
   const pts = [];
   let carry = 0;
   for (let i = 0; i + 3 < path.length && pts.length < BOMB_MAX * 2; i += 2) {
-    const ax = path[i], az = path[i + 1], bx = path[i + 2], bz = path[i + 3], len = Math.hypot(bx - ax, bz - az);
+    const ax = path[i], az = path[i + 1], bx = path[i + 2], bz = path[i + 3], len = hyp(bx - ax, bz - az);
     let u = carry;
     while (u <= len && pts.length < BOMB_MAX * 2) { pts.push(ax + (bx - ax) * u / len, az + (bz - az) * u / len); u += BOMB_SPACING; }
     carry = u - len;
@@ -338,7 +338,7 @@ function stepDome(sim, t) {
     const q = list[i];
     if (q.dead || !DOME_ZAPS.has(q.kind)) continue;
     const team = q.team ?? sim.byId.get(q.owner)?.team;
-    if (team === t.team || Math.hypot(q.x - t.x, q.z - t.z) > DOME_R) continue;
+    if (team === t.team || hyp(q.x - t.x, q.z - t.z) > DOME_R) continue;
     q.dead = true;
     t.zapT = DOME_ZAP;
     sim._emit({ t: 'zap', x: round2(q.x), z: round2(q.z), ox: round2(t.x), oz: round2(t.z), by: t.owner.id, kind: 'dome' });
@@ -351,7 +351,7 @@ function stepCrate(sim, t) {
   let mine = null, theirs = null;
   for (let i = 0; i < sim.players.length; i++) {
     const q = sim.players[i];
-    if (!q.alive || q.dummy || Math.hypot(q.ps.x - t.x, q.ps.z - t.z) > CRATE_REACH) continue;
+    if (!q.alive || q.dummy || hyp(q.ps.x - t.x, q.ps.z - t.z) > CRATE_REACH) continue;
     if (q.team === t.team) mine ??= q; else theirs ??= q;
   }
   const who = mine && theirs ? null : mine ?? theirs;
@@ -393,17 +393,17 @@ function driveRover(sim, t) {
     t.chase = q;
     let gx = null, gz = null;
     if (q) { gx = q.ps.x; gz = q.ps.z; }
-    else if (t.owner.alive && Math.hypot(t.owner.ps.x - t.x, t.owner.ps.z - t.z) > 5) { gx = t.owner.ps.x; gz = t.owner.ps.z; }
+    else if (t.owner.alive && hyp(t.owner.ps.x - t.x, t.owner.ps.z - t.z) > 5) { gx = t.owner.ps.x; gz = t.owner.ps.z; }
     t.pathN = 0; t.pathK = 0;
     if (gx !== null && sim.nav) t.pathN = sim.nav.findPath(t.x, t.z, gx, gz, t.path, 8, t.team);
     else if (gx !== null) { t.path[0] = gx; t.path[1] = gz; t.pathN = 1; }
   }
   const q = t.chase && t.chase.alive ? t.chase : null;
   // In range with a clear view: park and let the gun work.
-  if (q && Math.hypot(q.ps.x - t.x, q.ps.z - t.z) < ROVER_STOP && hasLineOfSight(sim.map, t.x, t.z, q.ps.x, q.ps.z, sim.eq.smokes)) { t.vx = 0; t.vz = 0; return; }
+  if (q && hyp(q.ps.x - t.x, q.ps.z - t.z) < ROVER_STOP && hasLineOfSight(sim.map, t.x, t.z, q.ps.x, q.ps.z, sim.eq.smokes)) { t.vx = 0; t.vz = 0; return; }
   if (t.pathK >= t.pathN) { t.vx = 0; t.vz = 0; return; }
   const px = t.path[t.pathK * 2], pz = t.path[t.pathK * 2 + 1];
-  const dx = px - t.x, dz = pz - t.z, d = Math.hypot(dx, dz);
+  const dx = px - t.x, dz = pz - t.z, d = hyp(dx, dz);
   if (d < 0.4) { t.pathK++; return; }
   const m = Math.min(ROVER_SPEED * STEP, d), ux = dx / d, uz = dz / d;
   if (raycastMap(sim.map, t.x, t.z, ux, uz, m + 0.5, 'blocksMove')) { t.pathK++; t.repath = Math.min(t.repath, 0.2); return; }
@@ -427,7 +427,7 @@ function stepScout(sim, g) {
   const o = g.owner;
   let fly = false, want = g.aim;
   if (o.isBot) {
-    if (Math.hypot(g.goalX - g.x, g.goalZ - g.z) < 3) {      // Reached it: on to somewhere else in the middle of the map.
+    if (hyp(g.goalX - g.x, g.goalZ - g.z) < 3) {      // Reached it: on to somewhere else in the middle of the map.
       g.goalX = sim.map.width * (0.2 + sim.rng() * 0.6); g.goalZ = sim.map.height * (0.2 + sim.rng() * 0.6);
     }
     want = Math.atan2(g.goalZ - g.z, g.goalX - g.x) + Math.sin(g.age * 1.7) * 0.5; fly = true;
@@ -445,7 +445,7 @@ function stepScout(sim, g) {
     for (let i = 0; i < sim.players.length; i++) {
       const q = sim.players[i];
       if (q.team === g.team || !q.alive || q.dummy) continue;
-      if (Math.hypot(q.ps.x - g.x, q.ps.z - g.z) > SCOUT_EYE) continue;
+      if (hyp(q.ps.x - g.x, q.ps.z - g.z) > SCOUT_EYE) continue;
       sim._onEqEvent({ t: 'marked', id: q.id, by: o.id, dur: SCOUT_MARK, kind: 'recon' });
     }
   }
@@ -463,7 +463,7 @@ function stepHound(sim, g) {
   // Station: at the owner's shoulder, a little behind their aim; with them dead, it holds where it is.
   if (o.alive) {
     const a = o.ps.aim + 2.4, sx = o.ps.x + Math.cos(a) * HOUND_OFFSET, sz = o.ps.z + Math.sin(a) * HOUND_OFFSET;
-    const dx = sx - g.x, dz = sz - g.z, d = Math.hypot(dx, dz);
+    const dx = sx - g.x, dz = sz - g.z, d = hyp(dx, dz);
     if (d > 0.1) {
       const m = Math.min(HOUND_SPEED * STEP * (d > 6 ? 1.6 : 1), d);
       g.x = clamp(g.x + dx / d * m, 0.5, sim.map.width - 0.5); g.z = clamp(g.z + dz / d * m, 0.5, sim.map.height - 0.5);
@@ -488,7 +488,7 @@ function houndTarget(sim, g) {
   for (let i = 0; i < sim.players.length; i++) {
     const q = sim.players[i];
     if (q.team === g.team || !q.alive || q.spawnProtect > 0 || q.dummy || sim._coldHidden(q, g.x, g.z)) continue;
-    const d = Math.hypot(q.ps.x - g.x, q.ps.z - g.z);
+    const d = hyp(q.ps.x - g.x, q.ps.z - g.z);
     if (d < bestD && hasLineOfSight(sim.map, g.x, g.z, q.ps.x, q.ps.z, sim.eq.smokes)) { bestD = d; best = q; }
   }
   return best;
@@ -528,7 +528,7 @@ function stepReticle(sim, g) {
     g.x = clamp(g.x + Math.cos(g.aim) * RETICLE_SPEED * STEP, 1, sim.map.width - 1);
     g.z = clamp(g.z + Math.sin(g.aim) * RETICLE_SPEED * STEP, 1, sim.map.height - 1);
     const n = g.path.length;
-    if (Math.hypot(g.x - g.path[n - 2], g.z - g.path[n - 1]) >= 1) g.path.push(round2(g.x), round2(g.z));
+    if (hyp(g.x - g.path[n - 2], g.z - g.path[n - 1]) >= 1) g.path.push(round2(g.x), round2(g.z));
     if (lineLength(g.path) >= BOMB_SPACING * (BOMB_MAX - 1)) g.done = true;
   } else if (g.held && lineLength(g.path) >= BOMB_MIN_LINE) g.done = true;      // Let go after drawing: drop it.
   if (!g.done) return false;
@@ -548,7 +548,7 @@ export function finishReticle(sim, g) {
 
 function lineLength(path) {
   let n = 0;
-  for (let i = 0; i + 3 < path.length; i += 2) n += Math.hypot(path[i + 2] - path[i], path[i + 3] - path[i + 1]);
+  for (let i = 0; i + 3 < path.length; i += 2) n += hyp(path[i + 2] - path[i], path[i + 3] - path[i + 1]);
   return n;
 }
 
@@ -566,7 +566,7 @@ export function airHp(g) {
 function ptSeg(px, pz, x0, z0, x1, z1) {
   const ux = x1 - x0, uz = z1 - z0, l2 = ux * ux + uz * uz || 1e-9;
   const u = clamp(((px - x0) * ux + (pz - z0) * uz) / l2, 0, 1);
-  return Math.hypot(px - x0 - ux * u, pz - z0 - uz * u);
+  return hyp(px - x0 - ux * u, pz - z0 - uz * u);
 }
 
 // Shortest distance from segment A to segment B (2D).
@@ -644,7 +644,7 @@ export function domeCovers(sim, x, z, team) {
   const list = sim.turrets;
   for (let i = 0; i < list.length; i++) {
     const t = list[i];
-    if (t.kind === 'dome' && t.team === team && Math.hypot(x - t.x, z - t.z) <= DOME_R) return true;
+    if (t.kind === 'dome' && t.team === team && hyp(x - t.x, z - t.z) <= DOME_R) return true;
   }
   return false;
 }

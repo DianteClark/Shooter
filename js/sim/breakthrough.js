@@ -17,6 +17,7 @@ import { BF, along, bfLayout, btAttackers, inArea, sectorBand } from '../shared/
 import { alive, closestBot, decodeStats, encodeStats, makeZones, packZone, restoreStats, unpackZone, walkable, zoneObjective } from './mode-kit.js';
 import { bestSpot, faceTo, intoArea, sendBack, spawnSpots, stepBounds, stepFlag, warmPaths } from './bf-kit.js';
 import { hqSpots } from './conquest.js';
+import { hyp } from '../shared/geometry.js';
 
 const STATS = ['btCaps', 'oobDs'];
 const REASONS = ['sectors', 'tickets', 'time'];
@@ -95,7 +96,7 @@ export class BreakthroughRules {
 
   _face(s) {
     let best = null, bd = Infinity;
-    for (const z of this.zones) { const d = Math.hypot(z.x - s.x, z.z - s.z); if (d < bd) { bd = d; best = z; } }
+    for (const z of this.zones) { const d = hyp(z.x - s.x, z.z - s.z); if (d < bd) { bd = d; best = z; } }
     return best ? faceTo(s, best) : 0;
   }
 
@@ -184,7 +185,7 @@ export class BreakthroughRules {
     const sim = this.sim, done = this.zones;
     for (const p of sim.players) {
       if (p.team !== this.att || !p.alive) continue;
-      if (done.some(z => Math.hypot(p.ps.x - z.x, p.ps.z - z.z) <= z.r + 12)) { addScore(p.score, BF.bt.sectorScore); sim._medal(p, 'bt_sector'); }
+      if (done.some(z => hyp(p.ps.x - z.x, p.ps.z - z.z) <= z.r + 12)) { addScore(p.score, BF.bt.sectorScore); sim._medal(p, 'bt_sector'); }
     }
     this.sector++;
     this.fellAt = sim.time;
@@ -239,7 +240,7 @@ export class BreakthroughRules {
     const assign = (bot, z, role, tag = '') => {
       const o = zoneObjective(z, role, tag);
       o.aim = face;
-      if ((role === 'attack') && Math.hypot(z.x - bot.ps.x, z.z - bot.ps.z) < BF.bt.push) { o.commit = true; o.key += 'c'; }
+      if ((role === 'attack') && hyp(z.x - bot.ps.x, z.z - bot.ps.z) < BF.bt.push) { o.commit = true; o.key += 'c'; }
       bot.setObjective(o); free.delete(bot); load.set(z, (load.get(z) ?? 0) + 1);
     };
     if (att) {
@@ -249,7 +250,7 @@ export class BreakthroughRules {
       for (const bot of [...free]) {
         let best = targets[0], bc = Infinity;
         for (const z of targets) {
-          const c = Math.hypot(z.x - bot.ps.x, z.z - bot.ps.z) + (load.get(z) ?? 0) * (3 + bot.S.objSplit);
+          const c = hyp(z.x - bot.ps.x, z.z - bot.ps.z) + (load.get(z) ?? 0) * (3 + bot.S.objSplit);
           if (c < bc) { bc = c; best = z; }
         }
         // Far from it, a third of the attackers come up the middle and the rest swing out to either side and close
@@ -276,7 +277,7 @@ export class BreakthroughRules {
     for (const bot of [...free]) {
       let best = zones[0], bc = Infinity;
       for (const z of zones) {
-        const c = (load.get(z) ?? 0) * 6 + Math.hypot(z.x - bot.ps.x, z.z - bot.ps.z) * 0.3;
+        const c = (load.get(z) ?? 0) * 6 + hyp(z.x - bot.ps.x, z.z - bot.ps.z) * 0.3;
         if (c < bc) { bc = c; best = z; }
       }
       assign(bot, best, 'defend');
@@ -296,7 +297,7 @@ export class BreakthroughRules {
     for (const side of [BF.bt.flank, BF.bt.flank * 0.6, BF.bt.flank * 0.3]) {
       const p = intoArea(l.area, z.x - dx * back - dz * side * lane, z.z - dz * back + dx * side * lane, 6);
       const w = walkable(this.sim, p.x, p.z);
-      if (this.sim.nav && Math.hypot(w.x - p.x, w.z - p.z) < 6) { at = w; break; }
+      if (this.sim.nav && hyp(w.x - p.x, w.z - p.z) < 6) { at = w; break; }
     }
     c.set(key, at);
     return at;

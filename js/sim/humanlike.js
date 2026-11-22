@@ -16,6 +16,7 @@
 
 import { BotBrain, SKILLS } from './bots.js';
 import { angleDiff, applyAimAssist, weaponDef } from './player.js';
+import { hyp } from '../shared/geometry.js';
 
 export const THUMB = {
   reaction: [0.3, 0.5],   // Seconds from an enemy coming on screen to the thumb starting to answer.
@@ -80,7 +81,7 @@ export class HumanLikeBrain extends BotBrain {
     if (fighting) {
       sim.posAt(q, H.lag, POS);
       const want = Math.atan2(POS.z - ps.z, POS.x - ps.x);
-      const d = Math.max(0.3, Math.hypot(q.ps.x - ps.x, q.ps.z - ps.z));
+      const d = Math.max(0.3, hyp(q.ps.x - ps.x, q.ps.z - ps.z));
       // Half way through the reaction the thumb starts across, as a bot's head does.
       if (this.reactLeft < this.reactTotal * 0.55) {
         stickDown = true;
@@ -125,7 +126,7 @@ export class HumanLikeBrain extends BotBrain {
     I.fire = fire && ps.swapT <= 0;
     // The aim stick being down is `aiming`; whether that becomes ADS is the move stick's business. A fight at full
     // stick is the hip: saying so here keeps update() from easing the stick the way it does for a bot that wants ADS.
-    const moving = Math.hypot(I.mx, I.mz) > 0.7;
+    const moving = hyp(I.mx, I.mz) > 0.7;
     I.aiming = stickDown && fighting && this.reactLeft <= 0 && (this.useAds || !moving);
     if (I.fire) I.sprint = false;
   }

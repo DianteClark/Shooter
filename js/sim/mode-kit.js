@@ -1,4 +1,5 @@
 // Small helpers the modes overhaul's rule modules share (js/sim/hq.js, ko.js, inf.js, oic.js, ctl.js, grind.js).
+import { hyp } from '../shared/geometry.js';
 export const r2 = v => Math.round(v * 100) / 100;
 
 // Zone records in the shape the Sim's own zones have, so sim._countIn, _pointView and _checkDefend work on them.
@@ -60,7 +61,7 @@ export function walkable(sim, x, z) {
 export function closestBot(free, x, z) {
   let best = null, bestD = Infinity;
   for (const bot of free) {
-    const d = Math.hypot(bot.ps.x - x, bot.ps.z - z);
+    const d = hyp(bot.ps.x - x, bot.ps.z - z);
     if (d < bestD) { bestD = d; best = bot; }
   }
   return best;

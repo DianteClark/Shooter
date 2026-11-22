@@ -20,7 +20,7 @@
 import { MAX_HP, WEAPON_IDS } from '../shared/constants.js';
 import { normalizeLoadout } from '../shared/catalog.js';
 import { WEAPONS } from '../shared/weapons.js';
-import { hasLineOfSight } from '../shared/geometry.js';
+import { hasLineOfSight, hyp } from '../shared/geometry.js';
 import {
   ZM, ZE, ZM_TEAM, ZM_KINDS, ZM_PERK_IDS, ZM_PERKS, ZM_POWERUPS, BOX_GUNS, START_GUN, NO_GUN,
   roundCount, roundHp, roundMix, spawnGap, paceBonus, isBossRound, zmMaxHp, clawDmg, zmPace, bruteCap, zmLayout, placeZmWalls, syncZmDoors, reblockNav, zmUsable, bandOpen, zmDoorStand,
@@ -293,7 +293,7 @@ export class ZmRules {
     // A font drinking (Saltmere Abbey): it calls the drowned, a share of them climbing out near it.
     let pool = cands;
     const call = this.econ.fontCall?.();
-    if (call && this.rng() < ZE.quest.call) { const near = cands.filter(s => Math.hypot(s.x - call.x, s.z - call.z) < 20); if (near.length) pool = near; }
+    if (call && this.rng() < ZE.quest.call) { const near = cands.filter(s => hyp(s.x - call.x, s.z - call.z) < 20); if (near.length) pool = near; }
     let best = null, bestS = -Infinity;
     for (let k = 0; k < 14; k++) {
       const s = pool[Math.floor(this.rng() * pool.length)];
@@ -314,7 +314,7 @@ export class ZmRules {
     const crew = this._targets();
     let best = null, bd = -1;
     for (const s of B.spots) {
-      const d = crew.reduce((m, q) => Math.min(m, Math.hypot(q.ps.x - s.x, q.ps.z - s.z)), Infinity);
+      const d = crew.reduce((m, q) => Math.min(m, hyp(q.ps.x - s.x, q.ps.z - s.z)), Infinity);
       const sc = (d === Infinity ? 0 : Math.min(d, 30)) + this.rng();
       if (sc > bd) { bd = sc; best = s; }
     }
@@ -383,7 +383,7 @@ export class ZmRules {
     let best = null, bestD = 30;
     for (const q of this.crew) {
       if (q === p || !q.alive || q.downed) continue;
-      const d = Math.hypot(q.ps.x - p.ps.x, q.ps.z - p.ps.z);
+      const d = hyp(q.ps.x - p.ps.x, q.ps.z - p.ps.z);
       if (d < bestD) { bestD = d; best = q; }
     }
     if (best && bestD > 1.4) {
@@ -428,7 +428,7 @@ export class ZmRules {
       stepPlayer(ps, I, dt, sim.map, sim.rng);
       return;
     }
-    const dx = tgt.ps.x - ps.x, dz = tgt.ps.z - ps.z, d = Math.hypot(dx, dz);
+    const dx = tgt.ps.x - ps.x, dz = tgt.ps.z - ps.z, d = hyp(dx, dz);
     // The claw: wind up in reach, strike if still in reach.
     if (p.zCool > 0) p.zCool -= dt;
     if (p.zSwing > 0) {
@@ -438,7 +438,7 @@ export class ZmRules {
         p.zCool = K.cool;
         if (this.kinds.swungOut(p)) return;      // A Bloater bursts instead.
         const hit = this._clawTarget(p, K.reach + 0.45);
-        if (hit) sim._damage(hit, p, clawDmg(p.zk, this.round), NO_GUN, Math.hypot(hit.ps.x - ps.x, hit.ps.z - ps.z));
+        if (hit) sim._damage(hit, p, clawDmg(p.zk, this.round), NO_GUN, hyp(hit.ps.x - ps.x, hit.ps.z - ps.z));
       }
     } else if (this.kinds.claw(p, p.zCool <= 0 && !!this._clawTarget(p, K.reach))) {
       // A special's own claw (a Bloater swells).
@@ -466,7 +466,7 @@ export class ZmRules {
         if (bc === c) break;
         c = bc;
       }
-      const tx = (c % W) + 0.5 - ps.x, tz = Math.floor(c / W) + 0.5 - ps.z, tl = Math.hypot(tx, tz);
+      const tx = (c % W) + 0.5 - ps.x, tz = Math.floor(c / W) + 0.5 - ps.z, tl = hyp(tx, tz);
       if (tl > 0.05) { mx = tx / tl; mz = tz / tl; }
       else { mx = dx / Math.max(d, 0.01); mz = dz / Math.max(d, 0.01); }
     }
@@ -480,7 +480,7 @@ export class ZmRules {
       sx += ex / e * (0.9 - e); sz += ez / e * (0.9 - e);
     }
     mx += sx * 1.4; mz += sz * 1.4;
-    const ml = Math.hypot(mx, mz);
+    const ml = hyp(mx, mz);
     const pace = p.zSwing > 0 ? 0.15 : p.zPace * (p.zSlowT > sim.time ? 0.45 : 1);     // Rime rounds slow.
     if (ml > 1e-4) { I.mx = mx / ml * pace; I.mz = mz / ml * pace; }
     I.aim = d < 3 ? Math.atan2(dz, dx) : ml > 1e-4 ? Math.atan2(mz, mx) : ps.aim;
@@ -492,7 +492,7 @@ export class ZmRules {
     // Stuck on something: sink and rise again elsewhere.
     p.zStuckT += dt;
     if (p.zStuckT > 3) {
-      const moved = Math.hypot(ps.x - p.zLastX, ps.z - p.zLastZ);
+      const moved = hyp(ps.x - p.zLastX, ps.z - p.zLastZ);
       if (moved < 0.6 && d > 3) { p.zStuck++; if (p.zStuck >= 2) { this._sink(p); return; } } else p.zStuck = 0;
       p.zStuckT = 0; p.zLastX = ps.x; p.zLastZ = ps.z;
     }
@@ -503,7 +503,7 @@ export class ZmRules {
     let best = null, bd = reach;
     for (const q of this.crew) {
       if (!q.alive || q.downed || q.away) continue;
-      const d = Math.hypot(q.ps.x - p.ps.x, q.ps.z - p.ps.z);
+      const d = hyp(q.ps.x - p.ps.x, q.ps.z - p.ps.z);
       if (d < bd && hasLineOfSight(this.sim.map, p.ps.x, p.ps.z, q.ps.x, q.ps.z)) { bd = d; best = q; }
     }
     return best;
@@ -577,8 +577,8 @@ export class ZmRules {
     let helper = null;
     for (const q of this.crew) {
       if (q === p || !q.alive || q.downed || q.away) continue;
-      if (Math.hypot(q.ps.x - p.ps.x, q.ps.z - p.ps.z) > ZM.reviveReach) continue;
-      if (Math.hypot(q.ps.vx, q.ps.vz) > 2.6) continue;     // Standing by is enough: shooting over them still counts.
+      if (hyp(q.ps.x - p.ps.x, q.ps.z - p.ps.z) > ZM.reviveReach) continue;
+      if (hyp(q.ps.vx, q.ps.vz) > 2.6) continue;     // Standing by is enough: shooting over them still counts.
       helper = q; break;
     }
     if (helper) {
@@ -647,7 +647,7 @@ export class ZmRules {
   _pickups(p) {
     for (let i = 0; i < this.drops.length; i++) {
       const d = this.drops[i];
-      if (Math.hypot(d.x - p.ps.x, d.z - p.ps.z) > ZM.drop.reach) continue;
+      if (hyp(d.x - p.ps.x, d.z - p.ps.z) > ZM.drop.reach) continue;
       this.drops.splice(i, 1);
       this._power(d.kind, p);
       return;
@@ -838,7 +838,7 @@ export class ZmRules {
     const lead = human ?? people.find(p => p.alive) ?? this.crew.find(p => p.alive && !p.downed);
     const humans = people.length > 0;
     const up = crew.filter(b => b.p.alive && !b.p.downed && b.p.zm);
-    const dist = (a, b) => Math.hypot(a.ps.x - b.ps.x, a.ps.z - b.ps.z);
+    const dist = (a, b) => hyp(a.ps.x - b.ps.x, a.ps.z - b.ps.z);
     // Who goes to whom: the downed, a person first, then whoever has bled longest; two go to a person, one to a bot,
     // the nearest free ones within their reach of the path. A reviver with three undead on it shoots first.
     const goTo = new Map();
@@ -875,7 +875,7 @@ export class ZmRules {
       // Its gun on the upgrade bench: wait by it, take it.
       const bn = this.econ.bench, bb = this.L.bench;
       if (bn.state && bn.owner === p.index && bb) {
-        if (bn.state === 2 && Math.hypot(bb.x - p.ps.x, bb.z - p.ps.z) < ZM.useReach * 0.9) { this._use(p, zmUsable(this.L, p.ps.x, p.ps.z, this._stateFor(p))); bot.setObjective(null); continue; }
+        if (bn.state === 2 && hyp(bb.x - p.ps.x, bb.z - p.ps.z) < ZM.useReach * 0.9) { this._use(p, zmUsable(this.L, p.ps.x, p.ps.z, this._stateFor(p))); bot.setObjective(null); continue; }
         bot.setObjective({ key: 'zbench', role: 'collect', x: bb.x, z: bb.z, r: 0.8 });
         continue;
       }
@@ -883,7 +883,7 @@ export class ZmRules {
       const bx = this.box;
       if ((bx.state === 1 || bx.state === 2) && bx.owner === p.index && !bx.moving) {
         const bs = this.L.boxSpots[bx.spot];
-        if (bx.state === 2 && Math.hypot(bs.x - p.ps.x, bs.z - p.ps.z) < ZM.useReach * 0.9) { this._use(p, zmUsable(this.L, p.ps.x, p.ps.z, this._stateFor(p))); bot.setObjective(null); continue; }
+        if (bx.state === 2 && hyp(bs.x - p.ps.x, bs.z - p.ps.z) < ZM.useReach * 0.9) { this._use(p, zmUsable(this.L, p.ps.x, p.ps.z, this._stateFor(p))); bot.setObjective(null); continue; }
         bot.setObjective({ key: `zbox${bx.spot}`, role: 'collect', x: bs.x, z: bs.z, r: 0.8 });
         continue;
       }
@@ -901,7 +901,7 @@ export class ZmRules {
         continue;
       }
       if (run) {
-        if (Math.hypot(run.x - p.ps.x, run.z - p.ps.z) < ZM.useReach * 0.8) {
+        if (hyp(run.x - p.ps.x, run.z - p.ps.z) < ZM.useReach * 0.8) {
           // A radio locking on (its tuner has to stay by it): stand with it.
           if (this.econ.quest.tuneI >= 0 && this.econ.quest.tuneBy === p.index) { bot.zStill = run; continue; }
           this._use(p, run.use);
@@ -915,7 +915,7 @@ export class ZmRules {
       // Something to buy near.
       const want = this._botWant(p, humans, lead);
       if (want) {
-        const d = Math.hypot(want.x - p.ps.x, want.z - p.ps.z);
+        const d = hyp(want.x - p.ps.x, want.z - p.ps.z);
         if (d < ZM.useReach * 0.8) {
           // The bench upgrades the gun in hand: a bot takes the one it came for out first.
           if (want.kind === 'bench' && want.gun && p.ps.weapon !== want.gun) { const sl = p.ps.primary === want.gun ? 0 : 1; p.ps.slot = sl; p.ps.weapon = want.gun; }
@@ -940,21 +940,21 @@ export class ZmRules {
   // Undead (alive) within r of p.
   _count(p, r) {
     let n = 0;
-    for (const q of this.horde) if (q.alive && Math.abs(q.ps.x - p.ps.x) < r && Math.abs(q.ps.z - p.ps.z) < r && Math.hypot(q.ps.x - p.ps.x, q.ps.z - p.ps.z) < r) n++;
+    for (const q of this.horde) if (q.alive && Math.abs(q.ps.x - p.ps.x) < r && Math.abs(q.ps.z - p.ps.z) < r && hyp(q.ps.x - p.ps.x, q.ps.z - p.ps.z) < r) n++;
     return n;
   }
 
   // Where a hurt bot falls back to: 7 m from the crowd near it, toward the lead's side when that is the way out.
   _fallBack(p, lead) {
     let cx = 0, cz = 0, n = 0;
-    for (const q of this.horde) if (q.alive && Math.hypot(q.ps.x - p.ps.x, q.ps.z - p.ps.z) < 9) { cx += q.ps.x; cz += q.ps.z; n++; }
+    for (const q of this.horde) if (q.alive && hyp(q.ps.x - p.ps.x, q.ps.z - p.ps.z) < 9) { cx += q.ps.x; cz += q.ps.z; n++; }
     if (!n) return null;
     cx /= n; cz /= n;
-    let ux = p.ps.x - cx, uz = p.ps.z - cz, l = Math.hypot(ux, uz) || 1;
+    let ux = p.ps.x - cx, uz = p.ps.z - cz, l = hyp(ux, uz) || 1;
     ux /= l; uz /= l;
     if (lead && lead !== p) {
-      const lx = lead.ps.x - p.ps.x, lz = lead.ps.z - p.ps.z, ll = Math.hypot(lx, lz);
-      if (ll > 2 && (lx * ux + lz * uz) / ll > -0.2) { ux = ux * 0.4 + lx / ll * 0.6; uz = uz * 0.4 + lz / ll * 0.6; l = Math.hypot(ux, uz) || 1; ux /= l; uz /= l; }
+      const lx = lead.ps.x - p.ps.x, lz = lead.ps.z - p.ps.z, ll = hyp(lx, lz);
+      if (ll > 2 && (lx * ux + lz * uz) / ll > -0.2) { ux = ux * 0.4 + lx / ll * 0.6; uz = uz * 0.4 + lz / ll * 0.6; l = hyp(ux, uz) || 1; ux /= l; uz /= l; }
     }
     const nav = this.sim.nav;
     for (const s of [7, 5, 3]) {
@@ -965,7 +965,7 @@ export class ZmRules {
   }
 
   _inTrap(x, z, pad = 1.2) {
-    return this.L.traps.some((T, i) => this.econ.traps[i]?.state === 1 && Math.hypot(T.x - x, T.z - z) < T.r + pad);
+    return this.L.traps.some((T, i) => this.econ.traps[i]?.state === 1 && hyp(T.x - x, T.z - z) < T.r + pad);
   }
 
   // A bot's own spot near the lead: the open gates within 14 m of them, one bot to each (3.5 m back on the lead's
@@ -973,9 +973,9 @@ export class ZmRules {
   _holdSpot(p, lead, k, n, P) {
     const L = this.L, lx = lead.ps.x, lz = lead.ps.z;
     const gates = (this._gateCache?.open === this.open && this._gateCache.t > this.sim.time - 1 && this._gateCache.lead === lead) ? this._gateCache.list
-      : (this._gateCache = { open: this.open, t: this.sim.time, lead, list: L.doors.filter(d => this.open & (1 << d.i) && Math.hypot(d.cx - lx, d.cz - lz) < 14).sort((a, b) => Math.hypot(a.cx - lx, a.cz - lz) - Math.hypot(b.cx - lx, b.cz - lz)) }).list;
+      : (this._gateCache = { open: this.open, t: this.sim.time, lead, list: L.doors.filter(d => this.open & (1 << d.i) && hyp(d.cx - lx, d.cz - lz) < 14).sort((a, b) => hyp(a.cx - lx, a.cz - lz) - hyp(b.cx - lx, b.cz - lz)) }).list;
     if (k < gates.length) {
-      const d = gates[k], l = Math.hypot(lx - d.cx, lz - d.cz) || 1, s = Math.min(3.5, l);
+      const d = gates[k], l = hyp(lx - d.cx, lz - d.cz) || 1, s = Math.min(3.5, l);
       const at = this._walk(d.cx + (lx - d.cx) / l * s, d.cz + (lz - d.cz) / l * s);
       if (!this._inTrap(at.x, at.z)) return at;
     }
@@ -992,8 +992,8 @@ export class ZmRules {
   _botStreak(p, P) {
     if (this.state !== 1 || this.econ.gear.length >= ZE.gearMax) return;
     const n = this._count(p, 14), item = p.zm.stk;
-    const mate = this.crew.some(q => q !== p && q.alive && q.downed && Math.hypot(q.ps.x - p.ps.x, q.ps.z - p.ps.z) < 20);
-    const boss = this.bossSeat >= 0 && this.sim.players[this.bossSeat]?.alive && Math.hypot(this.sim.players[this.bossSeat].ps.x - p.ps.x, this.sim.players[this.bossSeat].ps.z - p.ps.z) < 25;
+    const mate = this.crew.some(q => q !== p && q.alive && q.downed && hyp(q.ps.x - p.ps.x, q.ps.z - p.ps.z) < 20);
+    const boss = this.bossSeat >= 0 && this.sim.players[this.bossSeat]?.alive && hyp(this.sim.players[this.bossSeat].ps.x - p.ps.x, this.sim.players[this.bossSeat].ps.z - p.ps.z) < 25;
     const go = item === 'strike' ? n >= P.streak || (boss && n >= 2) : n >= P.streak - 2 || (mate && n >= 2) || boss;
     if (go) this.econ.deploy(p);
   }
@@ -1037,12 +1037,12 @@ export class ZmRules {
       // The fonts need the pumps (the power); one filled at a time, the nearest dry one open, else the gates to one.
       if (!this.power || q.woke) return null;
       const dry = L.relics.filter(r => !(q.got & (1 << r.i)));
-      const open = dry.filter(r => bandOpen(L, this.open, r.band)).sort((a, b) => Math.hypot(a.x - p.ps.x, a.z - p.ps.z) - Math.hypot(b.x - p.ps.x, b.z - p.ps.z))[0];
+      const open = dry.filter(r => bandOpen(L, this.open, r.band)).sort((a, b) => hyp(a.x - p.ps.x, a.z - p.ps.z) - hyp(b.x - p.ps.x, b.z - p.ps.z))[0];
       if (open) return { x: open.x, z: open.z, use: { kind: 'relic', i: open.i, cost: 0, ok: true } };
       return dry.length ? this._gateToward(p, dry[0].band, 1500) : null;
     }
     let best = null, bd = 50;
-    for (const r of left) { const d = Math.hypot(r.x - p.ps.x, r.z - p.ps.z); if (d < bd) { bd = d; best = r; } }
+    for (const r of left) { const d = hyp(r.x - p.ps.x, r.z - p.ps.z); if (d < bd) { bd = d; best = r; } }
     return best ? { x: best.x, z: best.z, use: { kind: 'relic', i: best.i, cost: 0, ok: true } } : null;
   }
 
@@ -1056,7 +1056,7 @@ export class ZmRules {
     const close = this.state === 1 && this._near(p, 6);
     let best = null, bestS = -Infinity;
     const consider = (item, score) => { if (score > bestS) { bestS = score; best = item; } };
-    const dist = (x, zz) => Math.hypot(x - ps.x, zz - ps.z);
+    const dist = (x, zz) => hyp(x - ps.x, zz - ps.z);
     const hasGun = ps.primary !== START_GUN || (ps.secondary !== NO_GUN && ps.secondary !== START_GUN);
     // What a gun is worth, by its wall price (a crate gun counts as a good one), a bench tier on top.
     const worth = g => (g === START_GUN || g === NO_GUN ? 0 : (L.wallBuys.find(w => w.gun === g)?.cost ?? 1600) + (z.tiers[g] ?? 0) * 1500);
@@ -1116,13 +1116,13 @@ export class ZmRules {
         const toPerk = perkM?.band === far, toBench = L.bench?.band === far;
         if (z.pts < d.cost + (toPerk ? 0 : perkNeed) + (toBench || toPerk ? 0 : bank) + (humans ? 1500 : 400) * c) continue;
         const worthIt = toPerk || toBench || L.wallBuys.some(w => w.band === far && w.cost > held + 150) || L.machines.some(m => m.band === far && !z.perks.includes(m.perk));
-        const byLead = lead && lead !== p && !lead.isBot && Math.hypot(lead.ps.x - d.cx, lead.ps.z - d.cz) < 8;
+        const byLead = lead && lead !== p && !lead.isBot && hyp(lead.ps.x - d.cx, lead.ps.z - d.cz) < 8;
         if (humans && !worthIt && !byLead && z.pts < 6000) continue;
         const dd = dist(d.cx, d.cz);
         if (dd < 50) consider({ kind: 'door', i: d.i, x: at.x, z: at.z }, (worthIt ? 16 : 5) + (toPerk ? 14 : 0) + (byLead ? 8 : 0) - dd * 0.4);
       }
     }
-    if (close && best && Math.hypot(best.x - ps.x, best.z - ps.z) > 7) return null;
+    if (close && best && hyp(best.x - ps.x, best.z - ps.z) > 7) return null;
     return best;
   }
 
@@ -1160,7 +1160,7 @@ export class ZmRules {
       const at = zmDoorStand(L, this.open, d);
       if (!at) continue;
       const far = bandOpen(L, this.open, d.a ?? d.from) ? (d.b ?? d.opens) : (d.a ?? d.from);
-      const sc = dist[far] * 100 + Math.hypot(at.x - p.ps.x, at.z - p.ps.z);
+      const sc = dist[far] * 100 + hyp(at.x - p.ps.x, at.z - p.ps.z);
       if (sc < bd) { bd = sc; best = { x: at.x, z: at.z, use: { kind: 'door', i: d.i, cost: d.cost, ok: true } }; }
     }
     return best;
@@ -1297,7 +1297,7 @@ export class ZmRules {
       if (!v) continue;
       const prev = this._prev.get(z.seat);
       let vx = 0, vz = 0;
-      if (prev && now > prev.t && now - prev.t < 0.5 && Math.hypot(z.x - prev.x, z.z - prev.z) < 3) {
+      if (prev && now > prev.t && now - prev.t < 0.5 && hyp(z.x - prev.x, z.z - prev.z) < 3) {
         vx = (z.x - prev.x) / (now - prev.t); vz = (z.z - prev.z) / (now - prev.t);
         vx = prev.vx + (vx - prev.vx) * 0.5; vz = prev.vz + (vz - prev.vz) * 0.5;
       }

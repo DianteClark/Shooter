@@ -86,6 +86,12 @@ class WallGrid {
 // equipment.js syncCover) are the tail past g.n: every query adds them, after the grid's own (they have the highest
 // indices, so wall order holds), and they may be spliced out again freely. Anything else (a wall below g.n removed,
 // a new array) rebuilds the grid; checking that costs two comparisons.
+// Length of (x, z). Math.hypot is a library call in V8 (about 20x the cost, and a boxed number per call), and the sim
+// asks for distances hundreds of thousands of times a second; this is the plain formula, which the engines inline.
+// (It can differ from Math.hypot in the last bit, so a match runs slightly differently from before build NEXT, the
+// same way every time.)
+export function hyp(x, z) { return Math.sqrt(x * x + z * z); }
+
 export function wallGrid(map) {
   const walls = map.walls;
   let g = GRIDS.get(walls);
@@ -241,7 +247,7 @@ export function smokeBlocks(smokes, ax, az, bx, bz) {
 // True when nothing that blocks vision (or smoke) lies between a and b. Any one wall settles it, so the walk stops at
 // the first hit.
 export function hasLineOfSight(map, ax, az, bx, bz, smokes) {
-  const dx = bx - ax, dz = bz - az, len = Math.hypot(dx, dz);
+  const dx = bx - ax, dz = bz - az, len = hyp(dx, dz);
   if (len < 1e-6) return true;
   const ux = dx / len, uz = dz / len;
   const g = wallGrid(map);

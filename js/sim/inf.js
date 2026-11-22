@@ -12,6 +12,7 @@
 import { addScore } from './streaks.js';
 import { MODES } from '../shared/modes.js';
 import { alive, chaseObjective, decodeStats, encodeStats, restoreStats, zoneObjective, makeZones } from './mode-kit.js';
+import { hyp } from '../shared/geometry.js';
 
 export const INF = { perFirst: 12, alpha: 0.5, respawn: 2.5, tick: 10, tickScore: 25, infectScore: 100, surviveScore: 500, regroup: 35 };
 const STATS = ['infections', 'survived'];
@@ -113,7 +114,7 @@ export class InfRules {
     const near = this.k.spawnNear;
     if (!near || p.team !== 1 || !this.started) return 0;
     let d = Infinity;
-    for (const q of this.sim.players) if (q.team === 0 && q.alive) d = Math.min(d, Math.hypot(q.ps.x - s.x, q.ps.z - s.z));
+    for (const q of this.sim.players) if (q.team === 0 && q.alive) d = Math.min(d, hyp(q.ps.x - s.x, q.ps.z - s.z));
     return d === Infinity ? 0 : -2 * Math.max(0, Math.min(d, 200) - near);
   }
 
@@ -165,7 +166,7 @@ export class InfRules {
     const sim = this.sim, out = this.spots.map(z => ({ x: z.x, z: z.z, r: Math.max(3, z.r * 0.6) }));
     const holds = sim.nav?.holds ?? [];
     // Farthest-point picks from the hold points, at least HAVEN_GAP apart, up to HAVEN_MAX in all.
-    const far = h => out.reduce((m, o) => Math.min(m, Math.hypot(o.x - h.x, o.z - h.z)), Infinity);
+    const far = h => out.reduce((m, o) => Math.min(m, hyp(o.x - h.x, o.z - h.z)), Infinity);
     while (out.length < HAVEN_MAX && holds.length) {
       let best = null, bd = HAVEN_GAP;
       for (const h of holds) { const d = far(h); if (d > bd) { bd = d; best = h; } }
@@ -182,15 +183,15 @@ export class InfRules {
     hv.forEach((h, i) => {
       if (i === g.spot) return;
       let threat = 0, crowd = 0, friend = Infinity;
-      for (const q of infected) { const d = Math.hypot(q.ps.x - h.x, q.ps.z - h.z); if (d < 30) threat += 30 - d; }
+      for (const q of infected) { const d = hyp(q.ps.x - h.x, q.ps.z - h.z); if (d < 30) threat += 30 - d; }
       for (const o of groups) if (o !== g && o.spot >= 0) {
-        const d = Math.hypot(hv[o.spot].x - h.x, hv[o.spot].z - h.z);
+        const d = hyp(hv[o.spot].x - h.x, hv[o.spot].z - h.z);
         friend = Math.min(friend, d);
         if (d < CROWD_R) crowd += CROWD_R - d;
       }
       // Near enough a neighbouring group to help each other, not on top of it (falling back, on top of it is fine).
       const support = friend < Infinity ? -Math.max(0, friend - SUPPORT_R) * (fallback ? 0.5 : 1) : 0;
-      const s = -Math.hypot(h.x - x, h.z - z) * (fallback ? 0.6 : 0.35) - threat * 1.5 - (fallback ? 0 : crowd * 2) + support + sim.rng() * 10;
+      const s = -hyp(h.x - x, h.z - z) * (fallback ? 0.6 : 0.35) - threat * 1.5 - (fallback ? 0 : crowd * 2) + support + sim.rng() * 10;
       if (s > bs) { bs = s; best = i; }
     });
     g.spot = best; g.since = sim.time; g.hold = g.roam ? 12 + sim.rng() * 8 : 60 + sim.rng() * 40;
@@ -205,13 +206,13 @@ export class InfRules {
       for (const b of crew) {
         let best = null, bs = Infinity;
         for (const q of prey) {
-          const d = Math.hypot(q.ps.x - b.ps.x, q.ps.z - b.ps.z);
+          const d = hyp(q.ps.x - b.ps.x, q.ps.z - b.ps.z);
           const s = d + (on.get(q) ?? 0) * 12;          // Spread over the prey: a target three are already on costs more.
           if (s < bs) { bs = s; best = q; }
         }
         if (!best) { b.setObjective(null); continue; }
         on.set(best, (on.get(best) ?? 0) + 1);
-        const d = Math.hypot(best.ps.x - b.ps.x, best.ps.z - b.ps.z);
+        const d = hyp(best.ps.x - b.ps.x, best.ps.z - b.ps.z);
         let tx = best.ps.x, tz = best.ps.z;
         // Flank: from further out, half the pack swings in from one side and the other half from the other.
         if (d > FLANK_FROM) {
@@ -248,7 +249,7 @@ export class InfRules {
       const pool = groups.filter(g => !roams(g)).sort((a, b) => a.ids.length - b.ids.length);
       const g = pool[0], at = g.spot >= 0 ? hv[g.spot] : null;
       let o = null, od = Infinity;
-      for (const q of pool) if (q !== g) { const d = at && q.spot >= 0 ? Math.hypot(hv[q.spot].x - at.x, hv[q.spot].z - at.z) : 0; if (d < od) { od = d; o = q; } }
+      for (const q of pool) if (q !== g) { const d = at && q.spot >= 0 ? hyp(hv[q.spot].x - at.x, hv[q.spot].z - at.z) : 0; if (d < od) { od = d; o = q; } }
       o.ids.push(...g.ids); o.cap = Math.max(o.cap, o.ids.length); o.roam = false;
       for (const id of g.ids) byId.set(id, o);
       groups.splice(groups.indexOf(g), 1);
@@ -263,8 +264,8 @@ export class InfRules {
       // (running across open ground with the pack on you is how a group dies).
       let near = 0, close = 0;
       for (const q of infected) {
-        if (h && Math.hypot(q.ps.x - h.x, q.ps.z - h.z) < PRESSED_R) near++;
-        if (Math.hypot(q.ps.x - x, q.ps.z - z) < QUIET_R) close++;
+        if (h && hyp(q.ps.x - h.x, q.ps.z - h.z) < PRESSED_R) near++;
+        if (hyp(q.ps.x - x, q.ps.z - z) < QUIET_R) close++;
       }
       if (g.lost > 0) g.hold = Math.min(g.hold, sim.time - g.since + LOST_HOLD);
       if (!h) this._pickHaven(g, groups, infected, x, z);
@@ -279,7 +280,7 @@ export class InfRules {
       if (!g || g.spot < 0) { b.setObjective(null); continue; }
       const h = hv[g.spot];
       let near = null, nd = Infinity;
-      for (const q of infected) { const d = Math.hypot(q.ps.x - h.x, q.ps.z - h.z); if (d < nd) { nd = d; near = q; } }
+      for (const q of infected) { const d = hyp(q.ps.x - h.x, q.ps.z - h.z); if (d < nd) { nd = d; near = q; } }
       const n = g.ids.length, k = g.ids.indexOf(b.p.id);
       const base = near ? Math.atan2(near.ps.z - h.z, near.ps.x - h.x) : (g.spot * 2.4);
       const aim = n > 1 ? base + (k - (n - 1) / 2) * (TAU / n) : base;

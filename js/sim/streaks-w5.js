@@ -17,7 +17,7 @@
 //               Dome does not stop fire; an enemy SAM within SAM_RANGE of the line shoots the jet down first; EMP
 //               before it drops calls it off.
 import { PLAYER_RADIUS, SIM_HZ } from '../shared/constants.js';
-import { hasLineOfSight, raycastMap, rayCircle } from '../shared/geometry.js';
+import { hasLineOfSight, raycastMap, rayCircle, hyp } from '../shared/geometry.js';
 import { angleDiff, shotPassage } from './player.js';
 import { AIR_HP, airHp, hurtAir } from './streaks-v9.js';
 
@@ -58,7 +58,7 @@ export function stepW5(sim) {
     if (r.at > sim.time) continue;
     runs.splice(i, 1);
     // An enemy SAM near the line shoots the jet down on its way in: no fire at all.
-    const sam = sim.turrets.find(t => t.kind === 'sam' && t.team !== r.team && Math.hypot(t.x - r.x, t.z - r.z) <= SAM_RANGE);
+    const sam = sim.turrets.find(t => t.kind === 'sam' && t.team !== r.team && hyp(t.x - r.x, t.z - r.z) <= SAM_RANGE);
     if (sam) {
       sim._emit({ t: 'sam_shot', id: sam.id, team: sam.team, ox: round2(sam.x), oz: round2(sam.z), x: round2(r.x), z: round2(r.z), kind: 'napalm' });
       sim._emit({ t: 'air_down', kind: 'napalm', team: r.team, owner: r.by.id, by: sam.owner.id, x: round2(r.x), z: round2(r.z) });
@@ -117,7 +117,7 @@ function stepVtol(sim, g) {
   g.hx ??= g.x; g.hz ??= g.z; g.rocketT ??= VTOL_ROCKET_GAP;
   // Station: a slow figure of eight over the spot it was called to, flown in at speed.
   const ox = Math.cos(g.age * 0.45) * VTOL_HOVER, oz = Math.sin(g.age * 0.9) * VTOL_HOVER * 0.5;
-  const sx = g.hx + ox, sz = g.hz + oz, dx = sx - g.x, dz = sz - g.z, d = Math.hypot(dx, dz);
+  const sx = g.hx + ox, sz = g.hz + oz, dx = sx - g.x, dz = sz - g.z, d = hyp(dx, dz);
   if (d > 0.05) {
     const m = Math.min(d, (d > 6 ? VTOL_SPEED : 4) * STEP);
     g.x = clamp(g.x + dx / d * m, 0.5, sim.map.width - 0.5); g.z = clamp(g.z + dz / d * m, 0.5, sim.map.height - 0.5);
@@ -146,7 +146,7 @@ function vtolTarget(sim, g) {
   for (let i = 0; i < sim.players.length; i++) {
     const q = sim.players[i];
     if (q.team === g.team || !q.alive || q.spawnProtect > 0 || q.dummy || sim._coldHidden(q, g.x, g.z)) continue;
-    const d = Math.hypot(q.ps.x - g.x, q.ps.z - g.z);
+    const d = hyp(q.ps.x - g.x, q.ps.z - g.z);
     if (d < bestD && hasLineOfSight(sim.map, g.x, g.z, q.ps.x, q.ps.z, sim.eq.smokes)) { bestD = d; best = q; }
   }
   return best;
@@ -207,7 +207,7 @@ function samTarget(sim, t) {
   for (let i = 0; i < sim.gunships.length; i++) {
     const g = sim.gunships[i];
     if (g.team === t.team || !(g.kind in AIR_HP)) continue;
-    const d = Math.hypot(g.x - t.x, g.z - t.z);
+    const d = hyp(g.x - t.x, g.z - t.z);
     if (d < bestD) { bestD = d; best = g; }
   }
   return best;

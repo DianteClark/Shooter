@@ -62,7 +62,7 @@
 // else, so snapshots, host migration and the renderer's grenade dots all cover them without knowing they exist.
 
 import { MAX_HP, SIM_HZ } from '../shared/constants.js';
-import { hasLineOfSight, raycastMap, resolveCircle, wallsInBox, wallsOnRay, wallScratch } from '../shared/geometry.js';
+import { hasLineOfSight, raycastMap, resolveCircle, wallsInBox, wallsOnRay, wallScratch, hyp } from '../shared/geometry.js';
 
 export const THROW_RANGE = 13;           // Base maximum, and where a quick tap lands.
 export const STRONGARM_RANGE = 19;       // Maximum with the Strong Arm perk.
@@ -252,7 +252,7 @@ function advance(map, p, spec, dt, onBounce) {
   if (p.quick > 1 && !p.grounded) dt *= p.quick;
   p.age += dt;
   fly(map, p, spec, dt, onBounce);
-  const stopped = spec.popsOnStop && p.grounded && Math.hypot(p.vx, p.vz) < STOPPED_SPEED;
+  const stopped = spec.popsOnStop && p.grounded && hyp(p.vx, p.vz) < STOPPED_SPEED;
   return p.age >= spec.fuse || stopped || (!!spec.burstOnStick && p.stuck);
 }
 
@@ -277,7 +277,7 @@ function fly(map, p, spec, dt, onBounce) {
     }
   }
   if (p.grounded) {
-    const speed = Math.hypot(p.vx, p.vz);
+    const speed = hyp(p.vx, p.vz);
     if (speed < 1e-3) { p.vx = 0; p.vz = 0; return; }
     const k = Math.max(0, speed - ROLL_DECEL * dt) / speed;
     p.vx *= k; p.vz *= k;
@@ -290,7 +290,7 @@ function fly(map, p, spec, dt, onBounce) {
 function sweep(map, p, spec, dt, onBounce) {
   let left = dt;
   for (let guard = 0; guard < 4 && left > 1e-5; guard++) {
-    const speed = Math.hypot(p.vx, p.vz);
+    const speed = hyp(p.vx, p.vz);
     if (speed < 1e-3) return;
     const dirX = p.vx / speed, dirZ = p.vz / speed, reach = speed * left;
     const hit = p.grounded ? raycastMap(map, p.x, p.z, dirX, dirZ, reach + SKIN, 'blocksMove')
@@ -640,7 +640,7 @@ export class EquipmentSystem {
     for (let i = 0; i < list.length; i++) {
       const q = list[i];
       if (q === except || q.dead || q.trip > 0 || !EQUIPMENT[q.kind].mine) continue;
-      const d = Math.hypot(q.x - x, q.z - z);
+      const d = hyp(q.x - x, q.z - z);
       if (d >= r) continue;
       if (d > 1e-3 && raycastMap(this.map, x, z, (q.x - x) / d, (q.z - z) / d, d, 'blocksBullet')) continue;
       q.trip = CHAIN_DELAY;
@@ -714,7 +714,7 @@ export class EquipmentSystem {
   inFire(x, z, team) {
     for (let i = 0; i < this._projectiles.length; i++) {
       const p = this._projectiles[i], b = EQUIPMENT[p.kind].burn || EQUIPMENT[p.kind].gas;   // Gas too: bots walk out of both.
-      if (b && p.stuck && !p.dead && p.team !== team && Math.hypot(p.x - x, p.z - z) < b.radius) return p;
+      if (b && p.stuck && !p.dead && p.team !== team && hyp(p.x - x, p.z - z) < b.radius) return p;
     }
     return null;
   }
@@ -761,7 +761,7 @@ export class EquipmentSystem {
     for (let i = 0; i < players.length; i++) {
       const v = players[i];
       if (!this._enemyOf(p, v, team) || v.spawnProtect) continue;
-      const d = Math.hypot(v.x - p.x, v.z - p.z);
+      const d = hyp(v.x - p.x, v.z - p.z);
       if (d >= r) continue;
       if (spec.blast) {
         if (d > 1e-3 && raycastMap(this.map, p.x, p.z, (v.x - p.x) / d, (v.z - p.z) / d, d, 'blocksBullet')) continue;
@@ -791,13 +791,13 @@ export class EquipmentSystem {
 
   // Returns true when it hit someone, which uses it up.
   _directHit(p, spec, px, pz, players, onDamage) {
-    const team = p.team, dx = p.x - px, dz = p.z - pz, len = Math.hypot(dx, dz);
+    const team = p.team, dx = p.x - px, dz = p.z - pz, len = hyp(dx, dz);
     if (len < 1e-6) return false;
     for (let i = 0; i < players.length; i++) {
       const v = players[i];
       if (!this._enemyOf(p, v, team) || v.spawnProtect) continue;
       const u = Math.max(0, Math.min(1, ((v.x - px) * dx + (v.z - pz) * dz) / (len * len)));
-      if (Math.hypot(px + dx * u - v.x, pz + dz * u - v.z) > spec.direct.radius) continue;
+      if (hyp(px + dx * u - v.x, pz + dz * u - v.z) > spec.direct.radius) continue;
       // Shiv: a hit in the back (the target facing the way the blade flies) is the kill; anything else is a wound.
       let dmg = spec.direct.damage;
       if (spec.direct.back && Number.isFinite(v.aim)) {
@@ -817,7 +817,7 @@ export class EquipmentSystem {
       const v = players[i];
       if (!this._enemyOf(p, v, p.team) || v.spawnProtect) continue;
       const reach = spec.mine.trigger * (v.perks && v.perks.includes('coldblood') ? COLD_TRIGGER : 1);
-      const d = Math.hypot(v.x - p.x, v.z - p.z);
+      const d = hyp(v.x - p.x, v.z - p.z);
       if (d >= reach) continue;
       if (!spec.mine.cone) return true;
       // Claymore: only someone in front of it, with nothing solid between, sets it off.
@@ -834,7 +834,7 @@ export class EquipmentSystem {
     for (let i = 0; i < players.length; i++) {
       const v = players[i];
       if (!this._enemyOf(p, v, p.team) || v.spawnProtect) continue;
-      const d = Math.hypot(v.x - p.x, v.z - p.z);
+      const d = hyp(v.x - p.x, v.z - p.z);
       if (d >= radius) continue;
       if (d > 1e-3 && raycastMap(this.map, p.x, p.z, (v.x - p.x) / d, (v.z - p.z) / d, d, 'blocksBullet')) continue;
       const k = v.perks && v.perks.includes('tacmask') ? TACMASK_FIRE : 1;
@@ -856,7 +856,7 @@ export class EquipmentSystem {
     const team = this._teamOf(p, players);
     for (let i = 0; i < players.length; i++) {
       const v = players[i];
-      if (!this._enemyOf(p, v, team) || Math.hypot(v.x - p.x, v.z - p.z) >= radius) continue;
+      if (!this._enemyOf(p, v, team) || hyp(v.x - p.x, v.z - p.z) >= radius) continue;
       if (hasProIn(v.perks, v.pro, 'coldblood')) continue;     // Blank Slate.
       onEvent({ t: 'marked', id: v.id, by: p.owner, dur, kind: p.kind });
     }
@@ -875,14 +875,14 @@ export class EquipmentSystem {
   // Sticky and Tagger: a throw that touches an enemy in flight sticks to them and rides along.
   _stick(p, spec, px, pz, players, onEvent) {
     const reach = spec.attach ? spec.attach.contact : spec.tag.contact;
-    const dx = p.x - px, dz = p.z - pz, len = Math.hypot(dx, dz);
+    const dx = p.x - px, dz = p.z - pz, len = hyp(dx, dz);
     if (len < 1e-6) return;
     const team = p.team;
     for (let i = 0; i < players.length; i++) {
       const v = players[i];
       if (!this._enemyOf(p, v, team) || v.spawnProtect) continue;
       const u = Math.max(0, Math.min(1, ((v.x - px) * dx + (v.z - pz) * dz) / (len * len)));
-      if (Math.hypot(px + dx * u - v.x, pz + dz * u - v.z) > reach) continue;
+      if (hyp(px + dx * u - v.x, pz + dz * u - v.z) > reach) continue;
       p.attached = v.id; p.stuck = true; p.grounded = true; p.vx = 0; p.vz = 0; p.x = v.x; p.z = v.z;
       if (spec.attach) p.age = Math.min(p.age, spec.fuse - spec.attach.hold);   // Time to know it, not to shake it.
       else p.age = spec.fuse - spec.tag.dur;
@@ -915,7 +915,7 @@ export class EquipmentSystem {
     for (let i = 0; i < players.length; i++) {
       const v = players[i];
       if (!this._enemyOf(p, v, team) || v.spawnProtect) continue;
-      const d = Math.hypot(v.x - p.x, v.z - p.z);
+      const d = hyp(v.x - p.x, v.z - p.z);
       if (d >= e.radius) continue;
       if (d > 1e-3 && raycastMap(this.map, p.x, p.z, (v.x - p.x) / d, (v.z - p.z) / d, d, 'blocksBullet')) continue;
       onEvent({ t: 'jammed', id: v.id, by: p.owner, dur: e.dur });
@@ -932,7 +932,7 @@ export class EquipmentSystem {
     for (let i = 0; i < players.length; i++) {
       const v = players[i];
       if (!v.alive || !(v.id === p.owner || (team !== undefined && v.team === team))) continue;
-      const d = Math.hypot(v.x - p.x, v.z - p.z);
+      const d = hyp(v.x - p.x, v.z - p.z);
       if (d >= m.radius) continue;
       if (d > 1e-3 && raycastMap(this.map, p.x, p.z, (v.x - p.x) / d, (v.z - p.z) / d, d, 'blocksBullet')) continue;
       onEvent({ t: 'heal', id: v.id, amount: m.amount, by: p.owner, kind: p.kind });
@@ -979,8 +979,8 @@ export class EquipmentSystem {
       if (!this._enemyOf(p, v, p.team) || v.spawnProtect) continue;
       const u = Math.max(0, Math.min(1, ((v.x - p.x0) * dx + (v.z - p.z0) * dz) / l2));
       const cx = p.x0 + dx * u, cz = p.z0 + dz * u;
-      if (Math.hypot(v.x - cx, v.z - cz) > t.width) continue;
-      if (v.perks && v.perks.includes('coldblood') && Math.hypot(v.x - p.x, v.z - p.z) > t.cold) continue;
+      if (hyp(v.x - cx, v.z - cz) > t.width) continue;
+      if (v.perks && v.perks.includes('coldblood') && hyp(v.x - p.x, v.z - p.z) > t.cold) continue;
       p.x = cx; p.z = cz;
       return true;
     }
@@ -996,7 +996,7 @@ export class EquipmentSystem {
     for (let i = 0; i < players.length; i++) {
       const v = players[i];
       if (!this._enemyOf(p, v, p.team) || v.spawnProtect) continue;
-      const d = Math.hypot(v.x - p.x, v.z - p.z);
+      const d = hyp(v.x - p.x, v.z - p.z);
       if (d <= c.contact) return true;
       if (d >= bestD) continue;
       if (raycastMap(this.map, p.x, p.z, (v.x - p.x) / d, (v.z - p.z) / d, d, 'blocksMove')) continue;
@@ -1015,7 +1015,7 @@ export class EquipmentSystem {
     for (let i = 0; i < players.length; i++) {
       const v = players[i];
       if (v.id !== p.owner) continue;
-      if (!v.alive || !v.room || Math.hypot(v.x - p.x, v.z - p.z) > spec.pickup) return false;
+      if (!v.alive || !v.room || hyp(v.x - p.x, v.z - p.z) > spec.pickup) return false;
       if (onEvent) onEvent({ t: 'pickup', id: v.id, kind: p.kind });
       return true;
     }
@@ -1028,7 +1028,7 @@ export class EquipmentSystem {
     for (let i = 0; i < list.length; i++) {
       const q = list[i], c = EQUIPMENT[q.kind].cover;
       if (!c || q.dead || q.n === 0 || q.owner === p.owner || (team !== undefined && q.team === team)) continue;
-      const d = Math.hypot(q.x - p.x, q.z - p.z);
+      const d = hyp(q.x - p.x, q.z - p.z);
       if (d >= blast.radius) continue;
       this._hurtCover(q, blastDamage(blast, d) * c.blastMult, p.owner, onEvent, p.kind);
     }
@@ -1043,7 +1043,7 @@ export class EquipmentSystem {
     for (let i = 0; i < list.length; i++) {
       const q = list[i];
       if (q === p || q.dead || !ZAPPABLE.has(q.kind) || q.owner === p.owner || (team !== undefined && this._teamOf(q, players) === team)) continue;
-      const d = Math.hypot(q.x - p.x, q.z - p.z);
+      const d = hyp(q.x - p.x, q.z - p.z);
       if (d < bestD) { bestD = d; best = q; }
     }
     if (!best) return false;
@@ -1055,13 +1055,13 @@ export class EquipmentSystem {
 
   // Returns true when something hit an enemy in flight (Impact goes off on them).
   _contact(p, spec, px, pz, players) {
-    const dx = p.x - px, dz = p.z - pz, len = Math.hypot(dx, dz);
+    const dx = p.x - px, dz = p.z - pz, len = hyp(dx, dz);
     if (len < 1e-6) return false;
     for (let i = 0; i < players.length; i++) {
       const v = players[i];
       if (!this._enemyOf(p, v, p.team) || v.spawnProtect) continue;
       const u = Math.max(0, Math.min(1, ((v.x - px) * dx + (v.z - pz) * dz) / (len * len)));
-      if (Math.hypot(px + dx * u - v.x, pz + dz * u - v.z) <= spec.contact) { p.x = px + dx * u; p.z = pz + dz * u; p.direct = true; return true; }
+      if (hyp(px + dx * u - v.x, pz + dz * u - v.z) <= spec.contact) { p.x = px + dx * u; p.z = pz + dz * u; p.direct = true; return true; }
     }
     return false;
   }
@@ -1075,7 +1075,7 @@ export class EquipmentSystem {
     for (let i = 0; i < players.length; i++) {
       const v = players[i];
       if (!this._enemyOf(p, v, team) || v.spawnProtect) continue;
-      const d = Math.hypot(v.x - p.x, v.z - p.z);
+      const d = hyp(v.x - p.x, v.z - p.z);
       if (d >= f.radius) continue;
       if (d > 1e-3 && raycastMap(this.map, p.x, p.z, (v.x - p.x) / d, (v.z - p.z) / d, d, 'blocksBullet')) continue;
       const masked = v.perks && v.perks.includes('tacmask') ? TACMASK_DAZE : 1;
@@ -1095,7 +1095,7 @@ export class EquipmentSystem {
     for (let i = 0; i < players.length; i++) {
       const v = players[i];
       if (!this._enemyOf(p, v, p.team) || v.spawnProtect || (v.perks && v.perks.includes('tacmask'))) continue;
-      const d = Math.hypot(v.x - p.x, v.z - p.z);
+      const d = hyp(v.x - p.x, v.z - p.z);
       if (d >= radius) continue;
       if (d > 1e-3 && raycastMap(this.map, p.x, p.z, (v.x - p.x) / d, (v.z - p.z) / d, d, 'blocksBullet')) continue;
       if (onDamage) onDamage(v.id, Math.max(1, Math.round(g.dps * BURN_TICK)), p.owner, spec.as);
@@ -1117,7 +1117,7 @@ export class EquipmentSystem {
     for (let i = 0; i < players.length; i++) {
       const v = players[i];
       if (!this._enemyOf(p, v, team) || v.spawnProtect) continue;
-      const d = Math.hypot(v.x - p.x, v.z - p.z);
+      const d = hyp(v.x - p.x, v.z - p.z);
       if (d >= s.radius) continue;
       if (d > 1e-3 && raycastMap(this.map, p.x, p.z, (v.x - p.x) / d, (v.z - p.z) / d, d, 'blocksBullet')) continue;
       const masked = v.perks && v.perks.includes('tacmask') ? TACMASK_DAZE : 1;
@@ -1132,7 +1132,7 @@ export class EquipmentSystem {
     for (let i = 0; i < list.length; i++) {
       const q = list[i];
       if (q === p || q.dead || !q.stuck || !FRYABLE.has(q.kind) || q.owner === p.owner || (team !== undefined && this._teamOf(q, players) === team)) continue;
-      if (Math.hypot(q.x - p.x, q.z - p.z) >= r) continue;
+      if (hyp(q.x - p.x, q.z - p.z) >= r) continue;
       q.dead = true;
       if (onEvent) onEvent({ t: 'fried', x: q.x, z: q.z, ox: p.x, oz: p.z, by: p.owner, kind: q.kind, src: p.kind });
     }
@@ -1198,7 +1198,7 @@ function rayCircleT(ox, oz, dx, dz, cx, cz, r) {
 // wall), about 0.5 runs both ways (it lies on open ground). Clipped by anything that blocks movement. Fills `out`.
 const BEAM = { x0: 0, z0: 0, x1: 0, z1: 0 };
 export function tripBeam(map, x, z, vx, vz, out = BEAM) {
-  const len = EQUIPMENT.tripwire.trip.len, l = Math.hypot(vx, vz) || 1, dx = vx / l, dz = vz / l;
+  const len = EQUIPMENT.tripwire.trip.len, l = hyp(vx, vz) || 1, dx = vx / l, dz = vz / l;
   const reach = (dirX, dirZ, max) => { const h = raycastMap(map, x, z, dirX, dirZ, max, 'blocksMove'); return h ? Math.max(0, h.t - 0.05) : max; };
   if (l > 0.75) {
     out.x0 = x; out.z0 = z;

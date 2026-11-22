@@ -22,7 +22,7 @@
 // {t:'plates_break', id} as the Plate Drop streak's.
 import { WEAPON_IDS } from '../shared/constants.js';
 import { WEAPONS } from '../shared/weapons.js';
-import { hasLineOfSight } from '../shared/geometry.js';
+import { hasLineOfSight, hyp } from '../shared/geometry.js';
 import { ZM, ZE, ZK, ZM_KINDS, ZM_TRAP_KINDS, ZM_LISTENER, ZM_BARKER, ZM_FERRY, NO_GUN, START_GUN, bandOpen, zmFxOf, zmTierCamo, zmUpgradable, zmWonderOf, supplyCost, roundMix, isBossKind, isQuestBoss, clawDmg,
   zmQuestBoss, lanternOrder } from '../shared/zombies.js';
 import { askOracle, lightLantern, stepLanterns, stepBarker, laneDodge, whirlHit, stepWhirls } from './zm-fair.js';     // Wrenfield Fair.
@@ -269,8 +269,8 @@ export class ZmEcon {
     if (now - last < (fx === 'blast' ? 0.2 : 0.08)) return;
     this._fxT.set(attacker.index, now);
     if (fx === 'shock') {
-      const near = R.horde.filter(q => q !== target && q.alive && Math.hypot(q.ps.x - target.ps.x, q.ps.z - target.ps.z) < 4.5)
-        .sort((a, b) => Math.hypot(a.ps.x - target.ps.x, a.ps.z - target.ps.z) - Math.hypot(b.ps.x - target.ps.x, b.ps.z - target.ps.z)).slice(0, 2);
+      const near = R.horde.filter(q => q !== target && q.alive && hyp(q.ps.x - target.ps.x, q.ps.z - target.ps.z) < 4.5)
+        .sort((a, b) => hyp(a.ps.x - target.ps.x, a.ps.z - target.ps.z) - hyp(b.ps.x - target.ps.x, b.ps.z - target.ps.z)).slice(0, 2);
       for (const q of near) {
         sim._emit({ t: 'zfx', k: 'arc', ox: r2(target.ps.x), oz: r2(target.ps.z), x: r2(q.ps.x), z: r2(q.ps.z) });
         sim._damage(q, attacker, dmg * 0.6, weapon, 0, 'zfx');
@@ -279,7 +279,7 @@ export class ZmEcon {
       const x = target.ps.x, z = target.ps.z;
       sim._emit({ t: 'explosion', x: r2(x), z: r2(z), radius: 2.2, by: attacker.id, weapon: 'thumper', zm: 1 });
       for (const q of R.horde) {
-        if (q === target || !q.alive || Math.hypot(q.ps.x - x, q.ps.z - z) > 2.6) continue;
+        if (q === target || !q.alive || hyp(q.ps.x - x, q.ps.z - z) > 2.6) continue;
         sim._damage(q, attacker, dmg * 0.5, weapon, 0, 'zfx');
       }
     }
@@ -301,7 +301,7 @@ export class ZmEcon {
         let best = null, bd = W.chainR;
         for (const q of R.horde) {
           if (!q.alive || hit.has(q)) continue;
-          const d = Math.hypot(q.ps.x - from.ps.x, q.ps.z - from.ps.z);
+          const d = hyp(q.ps.x - from.ps.x, q.ps.z - from.ps.z);
           if (d < bd && hasLineOfSight(sim.map, from.ps.x, from.ps.z, q.ps.x, q.ps.z)) { bd = d; best = q; }
         }
         if (!best) break;
@@ -332,7 +332,7 @@ export class ZmEcon {
     sim._emit({ t: 'zfx', k: 'shatter', x: r2(x), z: r2(z) });
     if (!killer?.zm) return;
     for (const q of this.R.horde) {
-      if (q === target || !q.alive || Math.hypot(q.ps.x - x, q.ps.z - z) > W.shatterR) continue;
+      if (q === target || !q.alive || hyp(q.ps.x - x, q.ps.z - z) > W.shatterR) continue;
       sim._damage(q, killer, isBossKind(q.zk) ? Math.max(1, q.zMax * W.boss * 4) : this.R.hp * W.shatterK, W.gun, 0, 'zfx');
     }
   }
@@ -411,10 +411,10 @@ export class ZmEcon {
   // The air strike's mark: the thickest crowd within 25 m (most undead within 4 m of one), else 9 m ahead.
   _crowd(ps) {
     let best = null, bn = 0;
-    const live = this.R.horde.filter(q => q.alive && Math.hypot(q.ps.x - ps.x, q.ps.z - ps.z) < 25);
+    const live = this.R.horde.filter(q => q.alive && hyp(q.ps.x - ps.x, q.ps.z - ps.z) < 25);
     for (const q of live) {
       let n = 0;
-      for (const o of live) if (Math.hypot(o.ps.x - q.ps.x, o.ps.z - q.ps.z) < 4) n++;
+      for (const o of live) if (hyp(o.ps.x - q.ps.x, o.ps.z - q.ps.z) < 4) n++;
       if (n > bn) { bn = n; best = q; }
     }
     return best ? { x: best.ps.x, z: best.ps.z } : { x: ps.x + Math.cos(ps.aim) * 9, z: ps.z + Math.sin(ps.aim) * 9 };
@@ -449,7 +449,7 @@ export class ZmEcon {
     let tgt = null, td = S.range;
     for (const q of R.horde) {
       if (!q.alive) continue;
-      const d = Math.hypot(q.ps.x - g.x, q.ps.z - g.z);
+      const d = hyp(q.ps.x - g.x, q.ps.z - g.z);
       if (d < td) { td = d; tgt = q; }
     }
     if (g.kind === 'drone') {
@@ -457,7 +457,7 @@ export class ZmEcon {
       if (tgt && td > 5) { hx = tgt.ps.x; hz = tgt.ps.z; }
       else if (owner?.alive) { const a = sim.time * 0.8 + g.id; hx = owner.ps.x + Math.cos(a) * 2.4; hz = owner.ps.z + Math.sin(a) * 2.4; }
       if (hx !== undefined) {
-        const dx = hx - g.x, dz = hz - g.z, l = Math.hypot(dx, dz), sp = Math.min(l, 7 * dt);
+        const dx = hx - g.x, dz = hz - g.z, l = hyp(dx, dz), sp = Math.min(l, 7 * dt);
         if (l > 0.05) { g.x += dx / l * sp; g.z += dz / l * sp; }
         g.x = Math.max(1, Math.min(sim.map.width - 1, g.x)); g.z = Math.max(1, Math.min(sim.map.height - 1, g.z));
       }
@@ -484,7 +484,7 @@ export class ZmEcon {
     if (!owner) return;
     for (const q of this.R.horde) {
       if (!q.alive) continue;
-      const d = Math.hypot(q.ps.x - x, q.ps.z - z);
+      const d = hyp(q.ps.x - x, q.ps.z - z);
       if (d > r || !hasLineOfSight(sim.map, x, z, q.ps.x, q.ps.z)) continue;
       sim._damage(q, owner, this._share(q, k, boss) * (1 - 0.4 * d / r), weapon, d, streak);
     }
@@ -511,13 +511,13 @@ export class ZmEcon {
       const step = t.acc; t.acc = 0;
       const T = this.L.traps[i], by = sim.players[t.by] ?? R.crew[0];
       for (const q of R.horde) {
-        if (!q.alive || Math.hypot(q.ps.x - T.x, q.ps.z - T.z) > T.r) continue;
+        if (!q.alive || hyp(q.ps.x - T.x, q.ps.z - T.z) > T.r) continue;
         const dmg = isBossKind(q.zk) ? (q.zMax ?? 1) * ZE.trap.boss * step : R.hp * ZE.trap.dps * step;
         sim._damage(q, by, dmg, 'knife', 0, 'ztrap');
       }
       const claw = R.horde[0];
       for (const p of R.crew) {
-        if (!p.alive || p.downed || Math.hypot(p.ps.x - T.x, p.ps.z - T.z) > T.r) continue;
+        if (!p.alive || p.downed || hyp(p.ps.x - T.x, p.ps.z - T.z) > T.r) continue;
         sim._damage(p, claw, ZE.trap.playerDps * step, 'knife', 0, 'ztrap');
       }
     });
@@ -539,7 +539,7 @@ export class ZmEcon {
     }
     if (X.timer > 0) return;
     const pad = this.L.exfil;
-    const out = R.crew.filter(p => p.alive && !p.downed && !p.away && Math.hypot(p.ps.x - pad.x, p.ps.z - pad.z) < pad.r + 0.8);
+    const out = R.crew.filter(p => p.alive && !p.downed && !p.away && hyp(p.ps.x - pad.x, p.ps.z - pad.z) < pad.r + 0.8);
     if (!out.length) {
       Object.assign(X, { state: 0, timer: 0, by: -1 });
       sim._emit({ t: 'zexfil', state: 0, fail: 1 });
@@ -579,7 +579,7 @@ export class ZmEcon {
   // A radio locking on: its tuner has to stay by it (up, in reach) for ZE.quest.tune s, or it is lost.
   _stepTune(dt) {
     const sim = this.sim, q = this.quest, r = this.L.relics[q.tuneI], p = sim.players[q.tuneBy];
-    const near = r && p?.zm && p.alive && !p.downed && !p.away && Math.hypot(p.ps.x - r.x, p.ps.z - r.z) < ZM.useReach + 0.6;
+    const near = r && p?.zm && p.alive && !p.downed && !p.away && hyp(p.ps.x - r.x, p.ps.z - r.z) < ZM.useReach + 0.6;
     if (!near || q.state) {
       sim._emit({ t: 'ztune', i: q.tuneI, state: 0, by: p?.id ?? null });
       Object.assign(q, { tuneI: -1, tuneBy: -1, tuneT: 0 });
@@ -642,7 +642,7 @@ export class ZmEcon {
       const { x, z } = q.pulse;
       q.pulse = null;
       for (const p of R.crew) {
-        if (!p.alive || p.downed || p.away || Math.hypot(p.ps.x - x, p.ps.z - z) > P.r) continue;
+        if (!p.alive || p.downed || p.away || hyp(p.ps.x - x, p.ps.z - z) > P.r) continue;
         if (!hasLineOfSight(sim.map, x, z, p.ps.x, p.ps.z)) continue;
         sim._damage(p, w, P.dmg * clawDmg(ZK.listener, R.round) / ZM.kinds.listener.dmg, NO_GUN, 0);
       }
@@ -689,7 +689,7 @@ export class ZmEcon {
   // extras (its next perk, its share of the next bench tier). `consider(item, score)` as ZmRules._botWant's.
   botWants(p, consider, P, keep = 0) {
     const L = this.L, R = this.R, z = p.zm, ps = p.ps, open = R.open, c = P?.cushion ?? 1;
-    const dist = (x, zz) => Math.hypot(x - ps.x, zz - ps.z);
+    const dist = (x, zz) => hyp(x - ps.x, zz - ps.z);
     const reach = s => s && bandOpen(L, open, s.band);
     const fight = R.state === 1;
     // The upgrade bench, for its best gun worth it (not the pistol), from the persona's round, with a cushion.
@@ -721,7 +721,7 @@ export class ZmEcon {
         const d = dist(T.sx, T.sz);
         if (d > 22) return;
         let n = 0;
-        for (const q of R.horde) if (q.alive && Math.hypot(q.ps.x - T.x, q.ps.z - T.z) < T.r + 4) n++;
+        for (const q of R.horde) if (q.alive && hyp(q.ps.x - T.x, q.ps.z - T.z) < T.r + 4) n++;
         if (n >= 3) consider({ kind: 'trap', i, x: T.sx, z: T.sz }, 26 + n - d);
       });
     }

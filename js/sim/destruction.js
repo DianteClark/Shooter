@@ -3,7 +3,7 @@
 // the stages from snapshots (js/shared/destruction.js setBreakState).
 import { WEAPON_CATEGORY } from '../shared/constants.js';
 import { MAT, MATERIALS, DAMAGED_AT, applyStage, encodeBreak, decodeBreak, prepareBreakables, resetBreakables } from '../shared/destruction.js';
-import { hasLineOfSight, wallsInBox, wallsOnRay, wallScratch } from '../shared/geometry.js';
+import { hasLineOfSight, wallsInBox, wallsOnRay, wallScratch, hyp } from '../shared/geometry.js';
 import { NEAR_COVER } from './player.js';
 import { reblockNav } from '../shared/zombies.js';
 
@@ -26,7 +26,7 @@ const SEND_EVERY = 15;            // Otherwise every this many ticks.
 
 const OWN_COVER = NEAR_COVER;     // Cover this close to the shooter is fired over (player.js ownCover).
 const r2 = v => Math.round(v * 100) / 100;
-const rectDist = (w, x, z) => Math.hypot(Math.max(w.x - x, 0, x - w.x - w.w), Math.max(w.z - z, 0, z - w.z - w.d));
+const rectDist = (w, x, z) => hyp(Math.max(w.x - x, 0, x - w.x - w.w), Math.max(w.z - z, 0, z - w.z - w.d));
 // Entry distance of a normalised ray into a rect (0 when it starts inside), or -1 for a miss.
 function slab(ox, oz, dx, dz, r) {
   let t0 = 0, t1 = Infinity;
@@ -120,7 +120,7 @@ export class Destruction {
       const p = this.list[id];
       // Nearest point of the piece's own (intact) rect, and the distance to it.
       const cx = Math.max(p.x, Math.min(x, p.x + p.w)), cz = Math.max(p.z, Math.min(z, p.z + p.d));
-      const d = Math.hypot(cx - x, cz - z);
+      const d = hyp(cx - x, cz - z);
       if (d > reach) continue;
       // A wall standing between the blast and the piece shields it. The test ends a hair short of the piece's face.
       if (d > 0.3) {
@@ -129,7 +129,7 @@ export class Destruction {
       }
       let dmg = power * (1 - 0.6 * d / reach);
       if (p.mat === 'heavy' && LIGHT_BLAST.has(source)) dmg *= MAT.heavy.light;
-      const dx = (p.x + p.w / 2) - x, dz = (p.z + p.d / 2) - z, dl = Math.hypot(dx, dz) || 1;
+      const dx = (p.x + p.w / 2) - x, dz = (p.z + p.d / 2) - z, dl = hyp(dx, dz) || 1;
       this._hit(id, dmg, dx / dl, dz / dl, e.by ?? null);
     }
   }
@@ -143,7 +143,7 @@ export class Destruction {
     const ox = shot.ox, oz = shot.oz;
     for (let i = 0; i < rays.length; i++) {
       const r = rays[i];
-      const len = Math.hypot(r.x - ox, r.z - oz);
+      const len = hyp(r.x - ox, r.z - oz);
       if (len < 1e-3) continue;
       const dx = (r.x - ox) / len, dz = (r.z - oz) / len, reach = len + 0.06;
       const n = wallsOnRay(map, ox, oz, dx, dz, reach, near);
@@ -194,7 +194,7 @@ export class Destruction {
       if (!b || !sim.players[i].alive) continue;
       if (p) {
         const cx = p.x + p.w / 2, cz = p.z + p.d / 2, ps = sim.players[i].ps;
-        if (Math.hypot(ps.x - cx, ps.z - cz) > REPLAN_NEAR && Math.hypot(b.goalX - cx, b.goalZ - cz) > REPLAN_NEAR) continue;
+        if (hyp(ps.x - cx, ps.z - cz) > REPLAN_NEAR && hyp(b.goalX - cx, b.goalZ - cz) > REPLAN_NEAR) continue;
       }
       if (b.pathLen > 0 && !b.arrived) b.pathDirty = true;
     }
@@ -209,7 +209,7 @@ export class Destruction {
     if (!this.on) return null;
     const map = this.sim.map, near = this._near = wallScratch(map, this._near);
     const n = wallsInBox(map, Math.min(ax, bx) - pad, Math.min(az, bz) - pad, Math.max(ax, bx) + pad, Math.max(az, bz) + pad, near);
-    const dx = bx - ax, dz = bz - az, len = Math.hypot(dx, dz) || 1;
+    const dx = bx - ax, dz = bz - az, len = hyp(dx, dz) || 1;
     let best = null, bestT = Infinity;
     for (let k = 0; k < n; k++) {
       const w = map.walls[near[k]];

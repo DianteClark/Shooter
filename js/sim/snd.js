@@ -17,6 +17,7 @@
 
 import { SND, SND_REASONS } from '../shared/modes.js';
 import { MAX_HP } from '../shared/constants.js';
+import { hyp } from '../shared/geometry.js';
 
 const STATES = ['freeze', 'live', 'post'];
 const BOMB_STATES = ['none', 'carried', 'dropped', 'planted', 'defused', 'exploded'];
@@ -183,18 +184,18 @@ export class SndRules {
     let best = null, bestD = SND.pickup;
     for (const p of this.sim.players) {
       if (p.team !== this.attackers || !p.alive) continue;
-      const d = Math.hypot(p.ps.x - b.x, p.ps.z - b.z);
+      const d = hyp(p.ps.x - b.x, p.ps.z - b.z);
       if (d <= bestD) { bestD = d; best = p; }
     }
     if (best) this._give(best);
   }
 
-  _still(p) { return Math.hypot(p.ps.vx, p.ps.vz) < SND.still && !p.ps.sliding; }
+  _still(p) { return hyp(p.ps.vx, p.ps.vz) < SND.still && !p.ps.sliding; }
 
   _siteAt(x, z) {
     for (let i = 0; i < this.sites.length; i++) {
       const s = this.sites[i];
-      if (Math.hypot(x - s.x, z - s.z) <= s.r) return i;
+      if (hyp(x - s.x, z - s.z) <= s.r) return i;
     }
     return -1;
   }
@@ -232,12 +233,12 @@ export class SndRules {
   // The defuser keeps it while they qualify; otherwise the nearest defender standing still at the bomb takes over.
   _stepDefuse(dt) {
     const b = this.bomb, df = this.defuse;
-    const ok = p => p && p.alive && p.team === this.defenders && this._still(p) && Math.hypot(p.ps.x - b.x, p.ps.z - b.z) <= SND.defuseReach;
+    const ok = p => p && p.alive && p.team === this.defenders && this._still(p) && hyp(p.ps.x - b.x, p.ps.z - b.z) <= SND.defuseReach;
     if (!ok(df.p)) {
       let best = null, bestD = Infinity;
       for (const p of this.sim.players) {
         if (!ok(p)) continue;
-        const d = Math.hypot(p.ps.x - b.x, p.ps.z - b.z);
+        const d = hyp(p.ps.x - b.x, p.ps.z - b.z);
         if (d < bestD) { bestD = d; best = p; }
       }
       if (df.p && df.p !== best) this.sim._emit({ t: 'snd', kind: 'stop', id: df.p.id, what: 'defuse' });
@@ -268,7 +269,7 @@ export class SndRules {
     sim.eq.setOffMines(b.x, b.z, SND.blast);
     for (const q of sim.players) {
       if (!q.alive || q.dummy) continue;
-      const d = Math.hypot(q.ps.x - b.x, q.ps.z - b.z);
+      const d = hyp(q.ps.x - b.x, q.ps.z - b.z);
       if (d > SND.blast) continue;
       q.spawnProtect = 0;
       if (planter && q.team !== planter.team) sim._damage(q, planter, MAX_HP * 3, planter.ps.weapon, d, null, false, 'bomb');
@@ -358,7 +359,7 @@ export function decodeSnd(sim, a, players) {
   const bombState = BOMB_STATES[a[4]] ?? 'none';
   // The site a plant is happening on: the one the planter stands in.
   const planter = a[9] >= 0 ? players[a[9]] : null;
-  const plantSite = planter ? sites.find(z => Math.hypot(planter.x - z.x, planter.z - z.z) <= z.r)?.id ?? null : null;
+  const plantSite = planter ? sites.find(z => hyp(planter.x - z.x, planter.z - z.z) <= z.r)?.id ?? null : null;
   return {
     state: STATES[a[0]] ?? 'live', round: a[1], attackers: a[2], toWin: sim.scoreLimit,
     carrier: bombState === 'carried' ? idOf(a[3]) : null,

@@ -18,7 +18,7 @@
 // you can see over a crate that an SMG cannot shoot through.
 
 import { PLAYER_RADIUS, PRIMARY_IDS, SECONDARY_ID, SECONDARY_IDS, WEAPON_IDS, secondaryAllowed } from '../shared/constants.js';
-import { hasLineOfSight, inShallows, rayCircle, resolveCircle, SHALLOW_SLOW, wallsOnRay, wallScratch } from '../shared/geometry.js';
+import { hasLineOfSight, inShallows, rayCircle, resolveCircle, SHALLOW_SLOW, wallsOnRay, wallScratch, hyp } from '../shared/geometry.js';
 import { HEAD_RADIUS, MAX_COVER_PIECES, WEAPONS, effectiveWeapon } from '../shared/weapons.js';
 import { attachmentsFor, NO_ATTACHMENTS } from '../shared/attachments.js';
 import { DEFAULT_LOADOUT, LETHALS, TACTICALS } from '../shared/catalog.js';
@@ -371,7 +371,7 @@ export function currentSpread(ps, w = weaponDef(ps)) {
   const ads = ps.adsT;
   let s = w.hipSpread + (w.adsSpread - w.hipSpread) * ads;
   s *= 1 + ps.bloom * (w.bloomScale || 1);
-  const speed = Math.hypot(ps.vx, ps.vz);
+  const speed = hyp(ps.vx, ps.vz);
   s *= 1 + 0.55 * (1 - ads) * Math.min(1, speed / MOVE.run);
   if (ps.sliding && !w.slideFire) s *= 1.7;
   if (w.settle) s *= w.settle.from + (1 - w.settle.from) * Math.min(1, ps.shotIndex / w.settle.shots);   // V10: tightens as it fires.
@@ -476,7 +476,7 @@ function fireOne(ps, w, rng) {
 
 function stepMovement(ps, input, w, dt, map) {
   const mx = input.mx || 0, mz = input.mz || 0;
-  const moveLen = Math.hypot(mx, mz);
+  const moveLen = hyp(mx, mz);
 
   if (ps.slideCool > 0) ps.slideCool -= dt;
 
@@ -490,7 +490,7 @@ function stepMovement(ps, input, w, dt, map) {
   if (ps.sprinting) ps.sprintRecoverT = sprintToFireOf(ps, w);
   else if (ps.sprintRecoverT > 0) ps.sprintRecoverT -= dt;
 
-  const speedNow = Math.hypot(ps.vx, ps.vz);
+  const speedNow = hyp(ps.vx, ps.vz);
   if (input.slide && !ps.noSlide && !ps.sliding && ps.slideCool <= 0 && speedNow >= MOVE.slideMinSpeed && !(map.shallows && inShallows(map, ps.x, ps.z))) {
     ps.sliding = true;
     ps.slideT = MOVE.slideDuration;
@@ -526,10 +526,10 @@ function stepMovement(ps, input, w, dt, map) {
     if (Math.min(moveLen, 1) * base > cap) scale = cap / moveLen;
     const tx = mx * scale, tz = mz * scale;
     const dx = tx - ps.vx, dz = tz - ps.vz;
-    const dLen = Math.hypot(dx, dz);
+    const dLen = hyp(dx, dz);
     if (dLen > 1e-6) {
       // Braking or reversing uses decel/accel in full; only pushing past a run builds slowly.
-      const targetSpeed = Math.hypot(tx, tz);
+      const targetSpeed = hyp(tx, tz);
       let a = targetSpeed < 0.01 ? MOVE.decel : MOVE.accel;
       if (targetSpeed > MOVE.run * w.moveMult && speedNow >= MOVE.run * w.moveMult * 0.97) a = MOVE.sprintAccel;
       const step = Math.min(dLen, a * dt);
@@ -543,7 +543,7 @@ function stepMovement(ps, input, w, dt, map) {
   // A slide at a low frame rate covers more than half a body per step. Taken in one go, the centre can land inside
   // a wall, and an L of two abutting walls (Sunken's water) then pushes it from one into the other. Substeps of
   // MAX_STEP keep the centre outside every wall, so resolveCircle always pushes back the way the player came.
-  const steps = Math.ceil(Math.hypot(nextX - ox, nextZ - oz) / MAX_STEP) || 1;
+  const steps = Math.ceil(hyp(nextX - ox, nextZ - oz) / MAX_STEP) || 1;
   let pushed = false;
   for (let i = 1; i <= steps; i++) {
     const tx = ps.x + (nextX - ox) / steps, tz = ps.z + (nextZ - oz) / steps;
@@ -557,8 +557,8 @@ function stepMovement(ps, input, w, dt, map) {
     ps.vx = (ps.x - ox) / dt;
     ps.vz = (ps.z - oz) / dt;
     if (ps.sliding) {
-      ps.slideSpeed = Math.min(ps.slideSpeed, Math.hypot(ps.vx, ps.vz) + MOVE.slideEndSpeed);
-      if (Math.hypot(ps.vx, ps.vz) < 1.2) { ps.sliding = false; ps.slideCool = slideCooldownOf(ps); }
+      ps.slideSpeed = Math.min(ps.slideSpeed, hyp(ps.vx, ps.vz) + MOVE.slideEndSpeed);
+      if (hyp(ps.vx, ps.vz) < 1.2) { ps.sliding = false; ps.slideCool = slideCooldownOf(ps); }
     }
   }
 
@@ -599,7 +599,7 @@ export function stepPlayer(ps, input, dt, map, rng = Math.random) {
   // How far in it can go also depends on the move stick; see adsRoomFor.
   const wantAds = !!input.aiming && !ps.sprinting && ps.swapT <= 0 && (ps.reloadT <= 0 || !!w.shellReload);
   const rate = dt / (adsTimeOf(ps, w) * TUNING.adsTime);
-  const room = wantAds ? adsRoomFor(Math.hypot(input.mx || 0, input.mz || 0)) : 0;
+  const room = wantAds ? adsRoomFor(hyp(input.mx || 0, input.mz || 0)) : 0;
   ps.adsT = ps.adsT < room ? Math.min(room, ps.adsT + rate) : Math.max(room, ps.adsT - rate * ADS_OUT_RATE);
 
   stepReload(ps, w, dt);
@@ -769,7 +769,7 @@ function penAt(t, penetrate) {
 
 // Can this gun's round travel from a to b? 0 when a solid or cover stops it first, else the damage multiplier left.
 export function shotPassage(map, ax, az, bx, bz, w) {
-  const len = Math.hypot(bx - ax, bz - az);
+  const len = hyp(bx - ax, bz - az);
   if (len < 1e-6) return 1;
   if (len > w.range) return 0;
   const dx = (bx - ax) / len, dz = (bz - az) / len;
@@ -950,7 +950,7 @@ export function heardEnemies(view, me, out = []) {
   for (let i = 0; i < view.players.length; i++) {
     const p = view.players[i];
     if (p.team === me.team || !p.alive || !p.sprinting || p.quiet) continue;
-    if (Math.hypot(p.x - me.x, p.z - me.z) <= HEAR_RANGE) out.push(p);
+    if (hyp(p.x - me.x, p.z - me.z) <= HEAR_RANGE) out.push(p);
   }
   return out;
 }
@@ -984,7 +984,7 @@ export class Footprints {
       let l = this.last.get(p.id);
       if (!l) this.last.set(p.id, l = { x: p.x, z: p.z, side: 1 });
       if (!p.alive) { l.x = p.x; l.z = p.z; continue; }
-      const dx = p.x - l.x, dz = p.z - l.z, d = Math.hypot(dx, dz);
+      const dx = p.x - l.x, dz = p.z - l.z, d = hyp(dx, dz);
       if (d < PRINT_STRIDE) continue;
       // A jump this long is a respawn or a teleport, not a walk.
       if (d < PRINT_STRIDE * 6) {
@@ -1008,7 +1008,7 @@ export class Footprints {
     for (let i = 0; i < PRINT_MAX; i++) {
       const f = this.pool[i], age = now - f.t;
       if (age < 0 || age >= PRINT_LIFE) continue;
-      if (Math.hypot(f.x - me.x, f.z - me.z) > PRINT_RANGE) continue;
+      if (hyp(f.x - me.x, f.z - me.z) > PRINT_RANGE) continue;
       if (!hasLineOfSight(map, me.x, me.z, f.x, f.z, smokes)) continue;
       f.k = 1 - age / PRINT_LIFE;
       out.push(f);

@@ -30,7 +30,7 @@ import { BR, EX, EX_AI_TEAM, CONTRACT_TYPES, CONTRACT_NAMES, MODES } from '../sh
 import { FFA_TEAM, MAX_HP } from '../shared/constants.js';
 import { normalizeLoadout } from '../shared/catalog.js';
 import { WEAPONS } from '../shared/weapons.js';
-import { wallsInBox } from '../shared/geometry.js';
+import { wallsInBox, hyp } from '../shared/geometry.js';
 import { botAttachments, skillOf } from './bots.js';
 import { stepPlayer } from './player.js';
 import { downedInput } from './br.js';
@@ -51,7 +51,7 @@ const COMMANDERS = 4;             // The first AI seats are the commanders' (the
 const TOUGH = { 1: 0.78, 2: 0.45, 3: 0.2 };
 const GUNS = [['smg', 'ar', 'tacsmg', 'shotgun', 'carbine'], ['ar', 'heavyar', 'lmg', 'dmr', 'heavysmg', 'burst'], ['battle', 'lmg', 'heavyar', 'saw', 'dmr', 'ar']];
 const r1 = v => Math.round(v * 10);
-const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
+const dist = (a, b) => hyp(a.x - b.x, a.z - b.z);
 
 function mulberry32(a) {
   return function () {
@@ -164,11 +164,11 @@ export class ExtractRules {
     const W = map.width, H = map.height, cx = W / 2, cz = H / 2, rng = mulberry32((this.seed ^ 0x51735) >>> 0);
     const loot = map.br?.loot ?? [];
     // Spots inside each place: indoor floor spots for intel, terminals, caches and posts; outdoor ones for phones.
-    this.inside = this.pois.map(p => loot.filter(l => l.indoor && Math.hypot(l.x - p.x, l.z - p.z) < p.r));
-    this.outside = this.pois.map(p => loot.filter(l => !l.indoor && Math.hypot(l.x - p.x, l.z - p.z) < p.r + 6));
+    this.inside = this.pois.map(p => loot.filter(l => l.indoor && hyp(l.x - p.x, l.z - p.z) < p.r));
+    this.outside = this.pois.map(p => loot.filter(l => !l.indoor && hyp(l.x - p.x, l.z - p.z) < p.r + 6));
     // A contract phone at each place, on open ground near its middle.
     this.phones = this.pois.map((p, i) => {
-      const o = this.outside[i].length ? this.outside[i].reduce((b, l) => (Math.hypot(l.x - p.x, l.z - p.z) < Math.hypot(b.x - p.x, b.z - p.z) ? l : b)) : p;
+      const o = this.outside[i].length ? this.outside[i].reduce((b, l) => (hyp(l.x - p.x, l.z - p.z) < hyp(b.x - p.x, b.z - p.z) ? l : b)) : p;
       const at = openNear(map, o.x, o.z, 1.2, 14);
       return { i, poi: i, x: at.x, z: at.z };
     });
@@ -184,9 +184,9 @@ export class ExtractRules {
     const cands = [];
     for (let z = 24; z < H - 24; z += 6) {
       for (let x = 24; x < W - 24; x += 6) {
-        const dc = Math.hypot(x - cx, z - cz);
+        const dc = hyp(x - cx, z - cz);
         if (dc < 60 || dc > 175) continue;
-        if (this.pois.some(p => Math.hypot(p.x - x, p.z - z) < p.r + 10)) continue;
+        if (this.pois.some(p => hyp(p.x - x, p.z - z) < p.r + 10)) continue;
         if (!openAt(map, x, z, EX.zoneR + 2)) continue;
         cands.push({ x, z, a: Math.atan2(z - cz, x - cx), dc });
       }
@@ -233,7 +233,7 @@ export class ExtractRules {
       for (let j = 0; j < 9; j++) {
         const a = a0 + (s.k + (j - 4) / 10) / n * Math.PI * 2, R = Math.min(W, H) * 0.43;
         const at = openNear(map, cx + Math.cos(a) * R, cz + Math.sin(a) * R, 2.2, 30);
-        const sc = Math.min(...this.pois.map(p => Math.hypot(p.x - at.x, p.z - at.z) - p.r)) - Math.abs(j - 4) * 2;
+        const sc = Math.min(...this.pois.map(p => hyp(p.x - at.x, p.z - at.z) - p.r)) - Math.abs(j - 4) * 2;
         if (sc > bestS) { bestS = sc; best = at; }
       }
       s.insert = best;
@@ -242,7 +242,7 @@ export class ExtractRules {
     // AI groups, one or two per place: a post (guards on indoor spots) and/or a patrol round the place.
     this.groupDefs = [];
     this.pois.forEach((p, i) => {
-      const tough = Math.min(1, Math.max(TOUGH[p.tier] ?? 0.2, 1 - Math.hypot(p.x - cx, p.z - cz) / 190));
+      const tough = Math.min(1, Math.max(TOUGH[p.tier] ?? 0.2, 1 - hyp(p.x - cx, p.z - cz) / 190));
       const route = [];
       for (let k = 0; k < 6; k++) {
         const a = k / 6 * Math.PI * 2 + rng(), o = openNear(map, p.x + Math.cos(a) * p.r * 0.85, p.z + Math.sin(a) * p.r * 0.85, 1, 10);
@@ -315,7 +315,7 @@ export class ExtractRules {
     for (const q of sim.players) {
       if (q === p || q.team !== p.team || !q.alive || q.downed || q.ex?.out) continue;
       let enemy = 999;
-      for (const e of sim.players) if (e.alive && e.team !== p.team) enemy = Math.min(enemy, Math.hypot(e.ps.x - q.ps.x, e.ps.z - q.ps.z));
+      for (const e of sim.players) if (e.alive && e.team !== p.team) enemy = Math.min(enemy, hyp(e.ps.x - q.ps.x, e.ps.z - q.ps.z));
       const sc = Math.min(enemy, 60) - (q.ps.firingT > 0 ? 15 : 0) + sim.rng() * 5;
       if (sc > bestS) { bestS = sc; best = q; best.exEnemy = enemy; }
     }
@@ -324,7 +324,7 @@ export class ExtractRules {
       let ex = 0, ez = 0, ed = Infinity;
       for (const e of sim.players) {
         if (!e.alive || e.team === p.team) continue;
-        const d = Math.hypot(e.ps.x - best.ps.x, e.ps.z - best.ps.z);
+        const d = hyp(e.ps.x - best.ps.x, e.ps.z - best.ps.z);
         if (d < ed) { ed = d; ex = e.ps.x; ez = e.ps.z; }
       }
       const away = ed < 999 ? Math.atan2(best.ps.z - ez, best.ps.x - ex) : sim.rng() * Math.PI * 2;
@@ -334,7 +334,7 @@ export class ExtractRules {
         const x = best.ps.x + Math.cos(a) * d, z = best.ps.z + Math.sin(a) * d;
         if (!(sim.nav ? sim.nav.isWalkable(x, z) : openAt(sim.map, x, z, 0.6))) continue;
         let close = false;
-        for (const e of sim.players) if (e.alive && e.team !== p.team && Math.hypot(e.ps.x - x, e.ps.z - z) < 25) { close = true; break; }
+        for (const e of sim.players) if (e.alive && e.team !== p.team && hyp(e.ps.x - x, e.ps.z - z) < 25) { close = true; break; }
         if (!close) return { x, z };
       }
     }
@@ -378,8 +378,8 @@ export class ExtractRules {
     let helper = null;
     for (const q of sim.players) {
       if (q === p || q.team !== p.team || q.ai || !this._up(q)) continue;
-      if (Math.hypot(q.ps.x - p.ps.x, q.ps.z - p.ps.z) > BR.reviveReach) continue;
-      if (q.ps.firingT > 1.2 || Math.hypot(q.ps.vx, q.ps.vz) > 2.6) continue;
+      if (hyp(q.ps.x - p.ps.x, q.ps.z - p.ps.z) > BR.reviveReach) continue;
+      if (q.ps.firingT > 1.2 || hyp(q.ps.vx, q.ps.vz) > 2.6) continue;
       helper = q; break;
     }
     if (helper) {
@@ -396,7 +396,7 @@ export class ExtractRules {
     const sim = this.sim;
     if (!p.alive) return;
     p.downed = false;
-    if (killer && killer !== p && killer.alive !== undefined) sim._kill(p, killer, weapon ?? killer.ps.weapon, Math.hypot(killer.ps.x - p.ps.x, killer.ps.z - p.ps.z), null, false, null);
+    if (killer && killer !== p && killer.alive !== undefined) sim._kill(p, killer, weapon ?? killer.ps.weapon, hyp(killer.ps.x - p.ps.x, killer.ps.z - p.ps.z), null, false, null);
     else sim._selfKill(p, 'bleed');
   }
 
@@ -414,7 +414,7 @@ export class ExtractRules {
 
   onShot(p) {
     const last = this.noise[this.noise.length - 1];
-    if (!last || last.team !== p.team || this.sim.time - last.t > 0.5 || Math.hypot(last.x - p.ps.x, last.z - p.ps.z) > 20) {
+    if (!last || last.team !== p.team || this.sim.time - last.t > 0.5 || hyp(last.x - p.ps.x, last.z - p.ps.z) > 20) {
       this.noise.push({ x: p.ps.x, z: p.ps.z, t: this.sim.time, team: p.team });
     }
   }
@@ -564,7 +564,7 @@ export class ExtractRules {
 
   // A human taps Call exfil in an open zone (bots do the same through _callExfil).
   _callExfil(p) {
-    const e = this.exfils.find(x => x.state === 1 && Math.hypot(p.ps.x - x.x, p.ps.z - x.z) <= x.r);
+    const e = this.exfils.find(x => x.state === 1 && hyp(p.ps.x - x.x, p.ps.z - x.z) <= x.r);
     if (!e || !this._up(p)) return false;
     e.state = 2; e.timer = EX.inbound; e.caller = p.team; e.hold = 0; e.holder = -1; e.waved = false;
     this.sim._emit({ t: 'excall', site: e.i, team: p.team, x: e.x, z: e.z });
@@ -597,7 +597,7 @@ export class ExtractRules {
     let team = -1, many = false, ai = false;
     for (const q of sim.players) {
       if (!q.alive || q.downed || q.ex?.out || q.away) continue;
-      if (Math.hypot(q.ps.x - e.x, q.ps.z - e.z) > e.r) continue;
+      if (hyp(q.ps.x - e.x, q.ps.z - e.z) > e.r) continue;
       if (q.ai) { ai = true; continue; }
       if (team === -1) team = q.team; else if (team !== q.team) many = true;
     }
@@ -620,7 +620,7 @@ export class ExtractRules {
     const sim = this.sim, s = this.squads.get(team), ids = [];
     for (const q of sim.players) {
       if (q.team !== team || q.ai || !q.alive || q.downed || q.away || q.ex?.out) continue;
-      if (Math.hypot(q.ps.x - e.x, q.ps.z - e.z) > e.r) continue;
+      if (hyp(q.ps.x - e.x, q.ps.z - e.z) > e.r) continue;
       ids.push(q.id);
       this._dropCase(q);
       q.ex.out = true;
@@ -657,7 +657,7 @@ export class ExtractRules {
     if (poi === undefined) {
       let bestS = -Infinity;
       this.pois.forEach((p, i) => {
-        const d = Math.hypot(p.x - ax, p.z - az);
+        const d = hyp(p.x - ax, p.z - az);
         if (d < 25 || (type !== 'escort' && !this.inside[i].length)) return;
         // Away from where the other squads are working, and from where they stand: contracts are for the AI, fights
         // between squads should come from choices (third parties, contested exfils), not from the dealer.
@@ -665,9 +665,9 @@ export class ExtractRules {
         for (const o of this.squads.values()) {
           if (o === s || o.done) continue;
           const oc = o.contract && this.pois[o.contract.poi];
-          if (oc && Math.hypot(oc.x - p.x, oc.z - p.z) < 70) busy += 40;
+          if (oc && hyp(oc.x - p.x, oc.z - p.z) < 70) busy += 40;
         }
-        for (const q of sim.players) if (!q.ai && q.alive && q.team !== s.team && Math.hypot(q.ps.x - p.x, q.ps.z - p.z) < 60) { busy += 30; break; }
+        for (const q of sim.players) if (!q.ai && q.alive && q.team !== s.team && hyp(q.ps.x - p.x, q.ps.z - p.z) < 60) { busy += 30; break; }
         const sc = -Math.abs(d - 115) * 0.6 + (4 - p.tier) * 8 - busy + this.rng() * 25;
         if (sc > bestS) { bestS = sc; poi = i; }
       });
@@ -691,7 +691,7 @@ export class ExtractRules {
       let best = null, bestS = -Infinity;
       this.pois.forEach((q, i) => {
         if (i === poi) return;
-        const d = Math.hypot(q.x - p.x, q.z - p.z);
+        const d = hyp(q.x - p.x, q.z - p.z);
         const sc = -Math.abs(d - (type === 'escort' ? 85 : 105)) + rng() * 20;
         if (d > 50 && d < 150 && sc > bestS) { bestS = sc; best = i; }
       });
@@ -767,13 +767,13 @@ export class ExtractRules {
             break;
           }
           c.x = q.ps.x; c.z = q.ps.z;
-          if (Math.hypot(q.ps.x - c.dx, q.ps.z - c.dz) < 2.6) this._complete(c);
+          if (hyp(q.ps.x - c.dx, q.ps.z - c.dz) < 2.6) this._complete(c);
           break;
         }
         if (c.state === 2) { c.back -= dt; if (c.back <= 0) { c.state = 0; c.x = c.ax; c.z = c.az; this._dirty(); } }
         if (sim.tick % 3) break;
         for (const q of this._members(c.team)) {
-          if (Math.hypot(q.ps.x - c.x, q.ps.z - c.z) < EX.intelReach) {
+          if (hyp(q.ps.x - c.x, q.ps.z - c.z) < EX.intelReach) {
             c.carrier = q.index; c.state = 1; q.ex.carry = true;
             sim._emit({ t: 'excase', team: c.team, id: q.id });
             this._dirty();
@@ -785,7 +785,7 @@ export class ExtractRules {
       case 'cache': {
         if (c.state === 0) {
           let planter = null;
-          for (const q of this._members(c.team)) if (Math.hypot(q.ps.x - c.x, q.ps.z - c.z) < EX.cacheReach && Math.hypot(q.ps.vx, q.ps.vz) < 1.6 && q.ps.firingT < 0.6) { planter = q; break; }
+          for (const q of this._members(c.team)) if (hyp(q.ps.x - c.x, q.ps.z - c.z) < EX.cacheReach && hyp(q.ps.vx, q.ps.vz) < 1.6 && q.ps.firingT < 0.6) { planter = q; break; }
           c.prog = planter ? c.prog + dt / EX.plantTime : Math.max(0, c.prog - dt);
           if (c.prog >= 1) {
             c.state = 1; c.prog = 0; c.fuse = EX.fuse; c.def = 0;
@@ -799,7 +799,7 @@ export class ExtractRules {
           let defuser = null;
           for (const q of sim.players) {
             if (q.ai || q.team === c.team || !this._up(q)) continue;
-            if (Math.hypot(q.ps.x - c.x, q.ps.z - c.z) < EX.cacheReach && Math.hypot(q.ps.vx, q.ps.vz) < 1.6) { defuser = q; break; }
+            if (hyp(q.ps.x - c.x, q.ps.z - c.z) < EX.cacheReach && hyp(q.ps.vx, q.ps.vz) < 1.6) { defuser = q; break; }
           }
           c.def = defuser ? c.def + dt / EX.defuseTime : Math.max(0, c.def - dt);
           if (c.def >= 1) { c.state = 0; c.def = 0; c.prog = 0; sim._emit({ t: 'explant', team: c.team, x: c.x, z: c.z, defused: true }); this._dirty(); }
@@ -815,7 +815,7 @@ export class ExtractRules {
         let ours = false, them = false;
         for (const q of sim.players) {
           if (!q.alive || q.downed || q.ex?.out || q.away) continue;
-          if (Math.hypot(q.ps.x - c.x, q.ps.z - c.z) > EX.hackR) continue;
+          if (hyp(q.ps.x - c.x, q.ps.z - c.z) > EX.hackR) continue;
           if (q.team === c.team) ours = true; else them = true;
         }
         c.contested = ours && them;
@@ -828,7 +828,7 @@ export class ExtractRules {
         let near = false, block = false;
         for (const q of sim.players) {
           if (!q.alive || q.downed || q.ex?.out || q.away) continue;
-          const d = Math.hypot(q.ps.x - c.x, q.ps.z - c.z);
+          const d = hyp(q.ps.x - c.x, q.ps.z - c.z);
           if (q.team === c.team && d < EX.escortNear) near = true;
           else if (q.team !== c.team && d < EX.escortBlock) block = true;
         }
@@ -841,12 +841,12 @@ export class ExtractRules {
         if (c.moving && c.path) {
           let step = EX.escortSpeed * dt;
           while (step > 0 && c.pi < c.path.length) {
-            const tx = c.path[c.pi], tz = c.path[c.pi + 1], d = Math.hypot(tx - c.x, tz - c.z);
+            const tx = c.path[c.pi], tz = c.path[c.pi + 1], d = hyp(tx - c.x, tz - c.z);
             if (d <= step) { c.x = tx; c.z = tz; c.pi += 2; step -= d; } else { c.x += (tx - c.x) / d * step; c.z += (tz - c.z) / d * step; step = 0; }
           }
-          const total = Math.hypot(c.dx - c.ax, c.dz - c.az) || 1;
-          c.prog = Math.max(0, Math.min(1, 1 - Math.hypot(c.dx - c.x, c.dz - c.z) / total));
-          if (c.pi >= c.path.length || Math.hypot(c.dx - c.x, c.dz - c.z) < 1.5) this._complete(c);
+          const total = hyp(c.dx - c.ax, c.dz - c.az) || 1;
+          c.prog = Math.max(0, Math.min(1, 1 - hyp(c.dx - c.x, c.dz - c.z) / total));
+          if (c.pi >= c.path.length || hyp(c.dx - c.x, c.dz - c.z) < 1.5) this._complete(c);
         }
         if (!c.wave && c.prog > 0.4) { c.wave = true; this._contractWave(c); }
         break;
@@ -877,7 +877,7 @@ export class ExtractRules {
     const sim = this.sim;
     for (const q of sim.players) {
       if (!q.alive || q.ex?.out || q.spawnProtect > 0) continue;
-      const d = Math.hypot(q.ps.x - c.x, q.ps.z - c.z);
+      const d = hyp(q.ps.x - c.x, q.ps.z - c.z);
       if (d < 5) { q.hp -= (5 - d) * 22; if (q.hp <= 0) { if (q.ex && this.tryDown(q, null, 'charge')) continue; sim._selfKill(q, 'charge'); } }
     }
   }
@@ -938,7 +938,7 @@ export class ExtractRules {
     }
     if (msg.act === 'take') {
       const ph = this.phones[msg.phone | 0], s = this.squadOf(p);
-      if (!ph || !s || s.done || !this._up(p) || Math.hypot(p.ps.x - ph.x, p.ps.z - ph.z) > EX.phoneReach + 1) return false;
+      if (!ph || !s || s.done || !this._up(p) || hyp(p.ps.x - ph.x, p.ps.z - ph.z) > EX.phoneReach + 1) return false;
       // One contract at a time: finish it, or abandon it on purpose (below), before a phone deals another.
       if (s.contract) return false;
       const o = this.offers(ph.i, s.team, s.taken)[msg.k | 0];
@@ -963,7 +963,7 @@ export class ExtractRules {
     const rng = mulberry32(((this.seed * 31 + phone * 977 + team * 131 + taken * 7919) ^ 0x0ffe5) >>> 0);
     const ph = this.phones[phone];
     const types = T.slice().sort(() => rng() - 0.5).slice(0, 3);
-    const near = this.pois.map((p, i) => ({ i, d: Math.hypot(p.x - ph.x, p.z - ph.z) }))
+    const near = this.pois.map((p, i) => ({ i, d: hyp(p.x - ph.x, p.z - ph.z) }))
       .filter(o => o.d > 20 && o.d < 170 && this.inside[o.i].length).sort((a, b) => a.d - b.d).slice(0, 6);
     return types.map((type, k) => {
       const o = near[Math.floor(rng() * near.length)] ?? { i: (phone + k + 1) % this.pois.length };
@@ -975,8 +975,8 @@ export class ExtractRules {
 
   _toughAt(x, z) {
     const W = this.sim.map.width, H = this.sim.map.height;
-    let t = Math.max(0.15, 1 - Math.hypot(x - W / 2, z - H / 2) / 190);
-    for (const p of this.pois) if (Math.hypot(p.x - x, p.z - z) < p.r + 10) t = Math.max(t, TOUGH[p.tier] ?? 0.2);
+    let t = Math.max(0.15, 1 - hyp(x - W / 2, z - H / 2) / 190);
+    for (const p of this.pois) if (hyp(p.x - x, p.z - z) < p.r + 10) t = Math.max(t, TOUGH[p.tier] ?? 0.2);
     return Math.min(1, t);
   }
 
@@ -1069,7 +1069,7 @@ export class ExtractRules {
       const a = a0 + k * 0.63, px = x + Math.cos(a) * 42, pz = z + Math.sin(a) * 42;
       if (!(sim.nav ? sim.nav.isWalkable(px, pz) : openAt(sim.map, px, pz, 0.8))) continue;
       let seen = false;
-      for (const q of sim.players) if (q.alive && !q.ai && Math.hypot(q.ps.x - px, q.ps.z - pz) < 22) { seen = true; break; }
+      for (const q of sim.players) if (q.alive && !q.ai && hyp(q.ps.x - px, q.ps.z - pz) < 22) { seen = true; break; }
       if (!seen) at = { x: px, z: pz };
     }
     if (!at) return null;
@@ -1139,7 +1139,7 @@ export class ExtractRules {
           if (b.targetVisible) return;
           // Posts and patrols chase only so far from home; waves go where they were sent.
           let ex = g.alertX, ez = g.alertZ;
-          const home = g.kind === 'wave' ? null : { x: g.x, z: g.z }, dh = home ? Math.hypot(ex - home.x, ez - home.z) : 0;
+          const home = g.kind === 'wave' ? null : { x: g.x, z: g.z }, dh = home ? hyp(ex - home.x, ez - home.z) : 0;
           if (home && dh > 40) { ex = home.x + (ex - home.x) / dh * 40; ez = home.z + (ez - home.z) / dh * 40; }
           const a = k * 2.1, x = ex + Math.cos(a) * 3, z = ez + Math.sin(a) * 3;
           const at = this._walk(x, z);
@@ -1149,7 +1149,7 @@ export class ExtractRules {
         if (g.kind === 'patrol' && g.route.length) {
           const lead = g.members[0];
           let wp = g.route[g.wp % g.route.length];
-          if (q === lead && Math.hypot(wp.x - q.ps.x, wp.z - q.ps.z) < 3.5) { g.wp++; wp = g.route[g.wp % g.route.length]; }
+          if (q === lead && hyp(wp.x - q.ps.x, wp.z - q.ps.z) < 3.5) { g.wp++; wp = g.route[g.wp % g.route.length]; }
           const tx = q === lead ? wp.x : lead.ps.x - Math.cos(lead.ps.aim) * 2.5 * k, tz = q === lead ? wp.z : lead.ps.z - Math.sin(lead.ps.aim) * 2.5 * k;
           const at = this._walk(tx, tz);
           b.setObjective({ key: `gp${g.id}:${q === lead ? g.wp : Math.round(at.x / 5) + ':' + Math.round(at.z / 5)}`, role: 'collect', x: at.x, z: at.z, r: 1.5 });
@@ -1177,7 +1177,7 @@ export class ExtractRules {
     let best = null, bestD = 40;
     for (const q of sim.players) {
       if (q === p || q.team !== p.team || q.ai || !this._up(q)) continue;
-      const d = Math.hypot(q.ps.x - p.ps.x, q.ps.z - p.ps.z);
+      const d = hyp(q.ps.x - p.ps.x, q.ps.z - p.ps.z);
       if (d < bestD) { bestD = d; best = q; }
     }
     const I = this._downIn || (this._downIn = { mx: 0, mz: 0, aim: 0, aiming: false, fire: false, sprint: false, slide: false, swap: false, tactical: false, lethal: false, streak: -1 });
@@ -1205,7 +1205,7 @@ export class ExtractRules {
       if (e.state === 3 && !e.final && e.timer < 12) continue;
       // Somebody else's ride is fair game too (taking it means a fight), but our own or an open one comes first.
       const theirs = (e.state === 2 || e.state === 3) && e.caller !== s.team && e.caller !== -1 && !e.final;
-      const d = Math.hypot(e.x - x, e.z - z) + (theirs ? 60 : 0);
+      const d = hyp(e.x - x, e.z - z) + (theirs ? 60 : 0);
       if (e.state === 1 && e.timer < d / 5 + 8) continue;      // It would shut before we got there.
       if (d < bestD) { bestD = d; best = e; }
     }
@@ -1242,7 +1242,7 @@ export class ExtractRules {
         if ((e.state !== 2 && e.state !== 3) || e.caller === s.team || e.final) continue;
         if (plan.weighed?.has(`${e.i}:${Math.round(e.timer)}`) || plan.weighed?.has(`${e.i}`)) continue;
         (plan.weighed ??= new Set()).add(`${e.i}`);
-        if (Math.hypot(e.x - ax, e.z - az) < 140 && bots.length >= 2 && this.rng() < 0.2 + plan.aggro * 0.5) { plan.contest = { site: e.i, until: this.t + 70 }; contest = e; }
+        if (hyp(e.x - ax, e.z - az) < 140 && bots.length >= 2 && this.rng() < 0.2 + plan.aggro * 0.5) { plan.contest = { site: e.i, until: this.t + 70 }; contest = e; }
       }
     }
     if (contest && contest.state !== 2 && contest.state !== 3) { plan.contest = null; contest = null; }
@@ -1253,7 +1253,7 @@ export class ExtractRules {
         const n = this.noise[i];
         if (n.team === s.team || n.team === AI_TEAM || n.weighed?.has(s.team)) continue;
         (n.weighed || (n.weighed = new Set())).add(s.team);
-        const d = Math.hypot(n.x - ax, n.z - az);
+        const d = hyp(n.x - ax, n.z - az);
         if (d > 18 && d < 70 && this.rng() < plan.aggro * 0.12) { fight = n; break; }
       }
     }
@@ -1265,7 +1265,7 @@ export class ExtractRules {
       const bot = p.bot;
       // A squadmate down nearby comes first, unless there is a fight in view.
       const mate = downed.length && !bot.targetVisible ? downed.reduce((m, q) => {
-        const d = Math.hypot(q.ps.x - p.ps.x, q.ps.z - p.ps.z);
+        const d = hyp(q.ps.x - p.ps.x, q.ps.z - p.ps.z);
         return d < 55 && (!m || d < m.d) ? { q, d } : m;
       }, null) : null;
       if (mate) {
@@ -1287,16 +1287,16 @@ export class ExtractRules {
       if (lead) {
         const o = spread(i, 4);
         const at = this._walk(lead.ps.x + o.dx, lead.ps.z + o.dz);
-        const far = Math.hypot(at.x - p.ps.x, at.z - p.ps.z) > 7;
+        const far = hyp(at.x - p.ps.x, at.z - p.ps.z) > 7;
         bot.setObjective({ key: far ? `with:${Math.round(at.x / 6)}:${Math.round(at.z / 6)}` : bot.objKey ?? 'with', role: 'hold', x: at.x, z: at.z, r: 3 });
         // On a landed exfil the bots step into the zone with them.
-        const e = this.exfils.find(x => x.state === 3 && Math.hypot(lead.ps.x - x.x, lead.ps.z - x.z) < x.r);
+        const e = this.exfils.find(x => x.state === 3 && hyp(lead.ps.x - x.x, lead.ps.z - x.z) < x.r);
         if (e) bot.setObjective({ key: `xin:${e.i}:${i}`, role: 'defend', x: e.x + o.dx * 0.8, z: e.z + o.dz * 0.8, r: 1.5 });
         return;
       }
       if (site) {
         // Call it when there, then hold round it; once it is down, everyone in.
-        if (site.state === 1 && Math.hypot(p.ps.x - site.x, p.ps.z - site.z) < site.r - 1) this._callExfil(p);
+        if (site.state === 1 && hyp(p.ps.x - site.x, p.ps.z - site.z) < site.r - 1) this._callExfil(p);
         const k = site.state === 3 ? 0.45 : 0.75, o = spread(i, site.r * k);
         bot.setObjective({ key: `xf:${site.i}:${site.state === 3 ? 'in' : 'out'}:${i}`, role: 'defend', x: site.x + o.dx, z: site.z + o.dz, r: 1.6, commit: site.state === 3 });
         return;
@@ -1308,7 +1308,7 @@ export class ExtractRules {
         return;
       }
       if (fight) {
-        const d = Math.max(1, Math.hypot(fight.x - ax, fight.z - az)), o = spread(i, 3);
+        const d = Math.max(1, hyp(fight.x - ax, fight.z - az)), o = spread(i, 3);
         const at = this._walk(fight.x + (ax - fight.x) / d * 14 + o.dx, fight.z + (az - fight.z) / d * 14 + o.dz);
         bot.setObjective({ key: `tp:${Math.round(at.x / 5)}:${Math.round(at.z / 5)}`, role: 'collect', x: at.x, z: at.z, r: 2 });
         return;
@@ -1318,7 +1318,7 @@ export class ExtractRules {
         // one is still in play).
         const ph = !humanIn && this._phoneFor(s, ax, az);
         if (ph) {
-          if (Math.hypot(p.ps.x - ph.x, p.ps.z - ph.z) <= EX.phoneReach && this._botTake(s, p, ph)) return;
+          if (hyp(p.ps.x - ph.x, p.ps.z - ph.z) <= EX.phoneReach && this._botTake(s, p, ph)) return;
           const o = spread(i, 1.6), at = this._walk(ph.x + o.dx, ph.z + o.dz);
           bot.setObjective({ key: `ph:${ph.i}:${i}`, role: 'collect', x: at.x, z: at.z, r: 1 });
           return;
@@ -1335,7 +1335,7 @@ export class ExtractRules {
     let ph = plan.phone != null ? this.phones[plan.phone] : null;
     if (!ph) {
       let bd = Infinity;
-      for (const q of this.phones) { const d = Math.hypot(q.x - x, q.z - z); if (d < bd) { bd = d; ph = q; } }
+      for (const q of this.phones) { const d = hyp(q.x - x, q.z - z); if (d < bd) { bd = d; ph = q; } }
       plan.phone = ph?.i ?? null;
     }
     return ph;
@@ -1346,7 +1346,7 @@ export class ExtractRules {
     const offers = this.offers(ph.i, s.team, s.taken);
     let k = -1, best = Infinity;
     offers.forEach((o, j) => {
-      const q = this.pois[o.poi], d = q ? Math.hypot(q.x - ph.x, q.z - ph.z) : 100;
+      const q = this.pois[o.poi], d = q ? hyp(q.x - ph.x, q.z - ph.z) : 100;
       const w = s.banked.concat(s.pot).filter(x => x.type === o.type).length + (s.lastType === o.type ? 2 : 0) + o.tier * 0.4 + d / 70 + this.rng() * 0.5;
       if (w < best) { best = w; k = j; }
     });
@@ -1359,7 +1359,7 @@ export class ExtractRules {
     let best = null, bd = r;
     for (const b of this.boxes) {
       if (this.boxDown.has(b.i)) continue;
-      const d = Math.hypot(b.x - x, b.z - z);
+      const d = hyp(b.x - x, b.z - z);
       if (d < bd) { bd = d; best = b; }
     }
     return best;
@@ -1375,8 +1375,8 @@ export class ExtractRules {
           const q = sim.players[c.carrier], at = this._walk(q.ps.x + o.dx, q.ps.z + o.dz);
           return { key: `esc:${c.id}:${Math.round(at.x / 5)}:${Math.round(at.z / 5)}`, role: 'collect', x: at.x, z: at.z, r: 2 };
         }
-        const closest = bots.reduce((b, q) => (Math.hypot(q.ps.x - c.x, q.ps.z - c.z) < Math.hypot(b.ps.x - c.x, b.ps.z - c.z) ? q : b));
-        if (closest === p) return { key: `case:${c.id}:${c.state}:${Math.round(c.x)}:${Math.round(c.z)}`, role: 'collect', x: c.x, z: c.z, r: 0.6, commit: Math.hypot(p.ps.x - c.x, p.ps.z - c.z) < 12 };
+        const closest = bots.reduce((b, q) => (hyp(q.ps.x - c.x, q.ps.z - c.z) < hyp(b.ps.x - c.x, b.ps.z - c.z) ? q : b));
+        if (closest === p) return { key: `case:${c.id}:${c.state}:${Math.round(c.x)}:${Math.round(c.z)}`, role: 'collect', x: c.x, z: c.z, r: 0.6, commit: hyp(p.ps.x - c.x, p.ps.z - c.z) < 12 };
         const at = this._walk(c.x + o.dx, c.z + o.dz);
         return { key: `cg:${c.id}:${i}:${Math.round(c.x)}`, role: 'defend', x: at.x, z: at.z, r: 2 };
       }
@@ -1388,8 +1388,8 @@ export class ExtractRules {
         return { key: `hvt:${c.id}:${Math.round(at.x / 5)}:${Math.round(at.z / 5)}`, role: 'attack', x: at.x, z: at.z, r: 3 };
       }
       case 'cache': {
-        const closest = bots.reduce((b, q) => (Math.hypot(q.ps.x - c.x, q.ps.z - c.z) < Math.hypot(b.ps.x - c.x, b.ps.z - c.z) ? q : b));
-        if (c.state === 0 && closest === p) return { key: `plant:${c.id}`, role: 'defend', x: c.x, z: c.z, r: 0.7, commit: Math.hypot(p.ps.x - c.x, p.ps.z - c.z) < 10 };
+        const closest = bots.reduce((b, q) => (hyp(q.ps.x - c.x, q.ps.z - c.z) < hyp(b.ps.x - c.x, b.ps.z - c.z) ? q : b));
+        if (c.state === 0 && closest === p) return { key: `plant:${c.id}`, role: 'defend', x: c.x, z: c.z, r: 0.7, commit: hyp(p.ps.x - c.x, p.ps.z - c.z) < 10 };
         const at = this._walk(c.x + o.dx * 1.4, c.z + o.dz * 1.4);
         return { key: `cd:${c.id}:${i}`, role: 'defend', x: at.x, z: at.z, r: 2 };
       }
@@ -1399,7 +1399,7 @@ export class ExtractRules {
       }
       case 'escort': {
         const ahead = c.path && c.pi < c.path.length ? { x: c.path[c.pi], z: c.path[c.pi + 1] } : { x: c.dx, z: c.dz };
-        const d = Math.max(1, Math.hypot(ahead.x - c.x, ahead.z - c.z));
+        const d = Math.max(1, hyp(ahead.x - c.x, ahead.z - c.z));
         const lead = i === 0 ? 4 : i === 1 ? -3 : 0;
         const at = this._walk(c.x + (ahead.x - c.x) / d * lead + o.dx * 0.5, c.z + (ahead.z - c.z) / d * lead + o.dz * 0.5);
         return { key: `es:${c.id}:${Math.round(at.x / 3)}:${Math.round(at.z / 3)}`, role: 'collect', x: at.x, z: at.z, r: 1.5 };

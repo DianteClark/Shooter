@@ -15,6 +15,8 @@
 //   --interval=US   sampling interval (default 100 us)
 //   --expose-gc     (node flag: node --expose-gc dev/sim-tickspikes.mjs) runs a full collection between ticks every
 //                   --gc-every ticks (default 300), outside the timed window: the spikes left are the game's own
+//   --alloc         also list the allocation sites (bytes a second, sampled, collected objects included): what
+//                   feeds the garbage collector
 //   --json=FILE     also write the numbers
 //   --stats         bot stats per scenario (kills, objective events, stuck bot-seconds a minute)
 //   --repeat=N      N runs a scenario, each in a fresh process (cold start included every time); the report is the
@@ -40,6 +42,7 @@ const INTERVAL = Number(opt('interval', 100));
 const GC_EVERY = Number(opt('gc-every', 300));
 const FORCE_GC = typeof globalThis.gc === 'function';
 const STATS = args.includes('--stats');
+const ALLOC = args.includes('--alloc');
 const SECS = opt('secs', null);
 
 // Graveyard Shift at a late round, as dev/sim-zombies.mjs's perf section sets it up: every gate open, the crew held
@@ -165,6 +168,7 @@ async function runOnce(name, sc) {
   let stuck = 0, h = 0x811c9dc5;
   const hist = new Map();
   if (PROFILE) { post('Profiler.enable'); post('Profiler.setSamplingInterval', { interval: INTERVAL }); post('Profiler.start'); }
+  if (ALLOC) { post('HeapProfiler.enable'); post('HeapProfiler.startSampling', { samplingInterval: 2048, includeObjectsCollectedByMajorGC: true, includeObjectsCollectedByMinorGC: true }); }
   gcEntries.length = 0;
   let chunkStart = 0;
   const profiles = [];
@@ -200,6 +204,20 @@ async function runOnce(name, sc) {
     }
   }
   if (PROFILE) profiles.push({ from: chunkStart, to: wall.length, p: post('Profiler.stop').profile });
+  if (ALLOC) {
+    // Bytes allocated per call site over the run (sampled; collected objects included): what feeds the collector.
+    const prof = post('HeapProfiler.stopSampling').profile, sites = new Map();
+    let total = 0;
+    const walk = n => {
+      const f = n.callFrame, k = `${f.functionName || '(anon)'} ${f.url.slice(f.url.lastIndexOf('/') + 1)}:${f.lineNumber + 1}`;
+      if (n.selfSize) { sites.set(k, (sites.get(k) ?? 0) + n.selfSize); total += n.selfSize; }
+      for (const c of n.children) walk(c);
+    };
+    walk(prof.head);
+    const secsRun = wall.length / SIM_HZ;
+    console.error(`\n${name}: about ${(total / secsRun / 1024).toFixed(0)} KB allocated a second; by site:`);
+    for (const [k, v] of [...sites].sort((a, b) => b[1] - a[1]).slice(0, 30)) console.error(`  ${(v / secsRun / 1024).toFixed(1).padStart(7)} KB/s  ${(100 * v / total).toFixed(1).padStart(5)}%  ${k}`);
+  }
   await yieldLoop();
   // GC overlapping each tick, in ms.
   const gcIn = new Array(wall.length).fill(0);

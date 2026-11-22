@@ -12,6 +12,7 @@
 import { WEAPONS } from '../shared/weapons.js';
 import { angleDiff, hasPro } from './player.js';
 import { AIR_HP, airHp, hurtAir } from './streaks-v9.js';
+import { hyp } from '../shared/geometry.js';
 
 export const BURN_TICK = 0.5;
 const TACMASK_BURN = 0.5;
@@ -58,7 +59,7 @@ export function lockTarget(sim, shooter, shot, w) {
   for (let i = 0; i < sim.gunships.length; i++) {
     const g = sim.gunships[i];
     if (g.team === shooter.team || !(g.kind in AIR_HP)) continue;
-    const dx = g.x - shot.ox, dz = g.z - shot.oz, d = Math.hypot(dx, dz);
+    const dx = g.x - shot.ox, dz = g.z - shot.oz, d = hyp(dx, dz);
     if (d > L.range) continue;
     // Straight overhead counts as in the cone: the seeker looks up, not along the ground.
     const a = d < 3 ? 0 : Math.abs(angleDiff(Math.atan2(dz, dx), shot.aim));

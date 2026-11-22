@@ -6,7 +6,7 @@
 // A finisher {a, v, k, t, dur, ax, az, aaim, vx, vz, vaim}: the attacker and target sim players, the FINISHERS index, the
 // seconds played and its length, and the pinned positions. Both players carry it as p.fin while it runs.
 import { EMOTES, FIN, FINISHERS, FINISHER_IDS, finishable, finisherIndex, getFinisher, weaponFinisher } from '../shared/finishers.js';
-import { hasLineOfSight } from '../shared/geometry.js';
+import { hasLineOfSight, hyp } from '../shared/geometry.js';
 import { SIM_HZ } from '../shared/constants.js';
 
 const STEP = 1 / SIM_HZ;
@@ -49,7 +49,7 @@ export function finisherTarget(sim, a, slack = 0) {
   for (let i = 0; i < sim.players.length; i++) {
     const v = sim.players[i];
     if (v === a || v.team === a.team || !v.alive) continue;
-    const d = Math.hypot(v.ps.x - a.ps.x, v.ps.z - a.ps.z);
+    const d = hyp(v.ps.x - a.ps.x, v.ps.z - a.ps.z);
     if (d < bd && canFinish(sim, a, v, slack)) { bd = d; best = v; }
   }
   return best;
@@ -63,7 +63,7 @@ export function startFinisher(sim, a, targetId = null, slack = 0) {
   if (!v) return false;
   // A melee weapon with its own finisher (weapons wave 4) plays that one, whatever the operator's pick.
   const def = weaponFinisher(a.ps.weapon) ?? getFinisher(a.finisher);
-  const dx = a.ps.x - v.ps.x, dz = a.ps.z - v.ps.z, d = Math.hypot(dx, dz) || 1;
+  const dx = a.ps.x - v.ps.x, dz = a.ps.z - v.ps.z, d = hyp(dx, dz) || 1;
   // The attacker steps in to arm's length on the line they came from (clear: they could see the target along it).
   const ax = v.ps.x + dx / d * FIN.stand, az = v.ps.z + dz / d * FIN.stand;
   const f = { a, v, k: finisherIndex(def.id), t: 0, dur: def.dur, ax, az, aaim: Math.atan2(-dz, -dx), vx: v.ps.x, vz: v.ps.z, vaim: v.ps.aim };
@@ -108,7 +108,7 @@ export function stepFins(sim) {
     if (f.t + 1e-6 < f.dur) continue;
     // Done: the lock lets go first, so the kill below sees two free players.
     release(sim, f);
-    const dist = Math.hypot(a.ps.x - v.ps.x, a.ps.z - v.ps.z);
+    const dist = hyp(a.ps.x - v.ps.x, a.ps.z - v.ps.z);
     sim._emit({ t: 'hit', by: a.id, target: v.id, dmg: Math.max(1, Math.ceil(v.hp)), x: round2(v.ps.x), z: round2(v.ps.z), killed: true, fin: 1 });
     sim._finKill = FINISHER_IDS[f.k];
     sim._kill(v, a, a.ps.weapon, dist, null, false, null);
@@ -155,7 +155,7 @@ export function botFinishers(sim) {
 // An enemy worth creeping up on: in sight, within STALK_RANGE, down or with their back turned.
 function stalkable(sim, p, v) {
   if (!v.alive || v.fin || v.team === p.team || v.spawnProtect > 0 || v.brAir || v.away) return false;
-  const dx = p.ps.x - v.ps.x, dz = p.ps.z - v.ps.z, d = Math.hypot(dx, dz);
+  const dx = p.ps.x - v.ps.x, dz = p.ps.z - v.ps.z, d = hyp(dx, dz);
   if (d > STALK_RANGE || d < 1e-3) return false;
   if (!v.downed && (Math.cos(v.ps.aim) * dx + Math.sin(v.ps.aim) * dz) / d >= FIN.behindCos) return false;
   return hasLineOfSight(sim.map, p.ps.x, p.ps.z, v.ps.x, v.ps.z);
@@ -165,7 +165,7 @@ function stalkTarget(sim, p) {
   for (let i = 0; i < sim.players.length; i++) {
     const v = sim.players[i];
     if (v === p || v.team === p.team) continue;
-    const d = Math.hypot(v.ps.x - p.ps.x, v.ps.z - p.ps.z);
+    const d = hyp(v.ps.x - p.ps.x, v.ps.z - p.ps.z);
     if (d < bd && stalkable(sim, p, v)) { bd = d; best = v; }
   }
   return best;
@@ -178,7 +178,7 @@ export function stalkInput(sim, p, I) {
   const back = v.downed ? 0.9 : 1.1;
   const tx = v.ps.x - Math.cos(v.ps.aim) * back * (v.downed ? 0 : 1) + (v.downed ? (p.ps.x - v.ps.x) * 0.3 : 0);
   const tz = v.ps.z - Math.sin(v.ps.aim) * back * (v.downed ? 0 : 1) + (v.downed ? (p.ps.z - v.ps.z) * 0.3 : 0);
-  const dx = tx - p.ps.x, dz = tz - p.ps.z, d = Math.hypot(dx, dz);
+  const dx = tx - p.ps.x, dz = tz - p.ps.z, d = hyp(dx, dz);
   const k = d > 0.25 ? 1 / d : 0;
   I.mx = dx * k; I.mz = dz * k;
   I.aim = Math.atan2(v.ps.z - p.ps.z, v.ps.x - p.ps.x);

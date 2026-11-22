@@ -28,7 +28,7 @@
 import { CP, CP_DIFFS, cpDecode, cpPoint, missionLines } from '../shared/campaign.js';
 import { MAX_HP } from '../shared/constants.js';
 import { normalizeLoadout } from '../shared/catalog.js';
-import { wallsInBox, hasLineOfSight } from '../shared/geometry.js';
+import { wallsInBox, hasLineOfSight, hyp } from '../shared/geometry.js';
 import { botAttachments, skillOf } from './bots.js';
 import { stepPlayer, weaponDef, angleDiff } from './player.js';
 import { downedInput } from './br.js';
@@ -46,7 +46,7 @@ const STATES = ['brief', 'live', 'failed', 'complete'];
 // Appended only (the wire sends the index): 5 is an abort, then Operation Starfall's lost pursuit and moved hostage.
 const FAILS = ['wipe', 'vip', 'time', 'lost', 'escaped', 'abort', 'trail', 'hostage'];
 const r1 = v => Math.round(v * 10);
-const dist = (ax, az, bx, bz) => Math.hypot(ax - bx, az - bz);
+const dist = (ax, az, bx, bz) => hyp(ax - bx, az - bz);
 
 // Open ground: no wall that blocks movement within r of (x, z), and not under a roof (as js/sim/extract.js).
 const _wb = [];
@@ -236,7 +236,7 @@ export class CampaignRules {
     for (const q of sim.players) {
       if (q === p || q.team !== 0 || q.ai || !this._up(q)) continue;
       if (dist(q.ps.x, q.ps.z, p.ps.x, p.ps.z) > CP.reviveReach) continue;
-      if (q.ps.firingT > 1.2 || Math.hypot(q.ps.vx, q.ps.vz) > 2.6) continue;
+      if (q.ps.firingT > 1.2 || hyp(q.ps.vx, q.ps.vz) > 2.6) continue;
       helper = q; break;
     }
     if (helper) {
@@ -624,7 +624,7 @@ export class CampaignRules {
         let planter = null;
         for (const q of sim.players) {
           if (q.team !== 0 || q.ai || !this._up(q)) continue;
-          if (dist(q.ps.x, q.ps.z, site.x, site.z) < CP.plantReach && Math.hypot(q.ps.vx, q.ps.vz) < 1.8) { planter = q; break; }
+          if (dist(q.ps.x, q.ps.z, site.x, site.z) < CP.plantReach && hyp(q.ps.vx, q.ps.vz) < 1.8) { planter = q; break; }
         }
         site.prog = planter ? site.prog + dt / (s.plant ?? 3) : Math.max(0, site.prog - dt * 0.5);
         if (site.prog >= 1) { site.state = 1; site.prog = 1; site.def = 0; sim._emit({ t: 'cpplant', i: site.i }); this._dirty(); }
@@ -632,7 +632,7 @@ export class CampaignRules {
         let puller = null;
         for (const q of sim.players) {
           if (q.team !== CP.team || !q.alive || !q.cpGroup || q === this.boss?.p) continue;
-          if (dist(q.ps.x, q.ps.z, site.x, site.z) < CP.plantReach && Math.hypot(q.ps.vx, q.ps.vz) < 1.8) { puller = q; break; }
+          if (dist(q.ps.x, q.ps.z, site.x, site.z) < CP.plantReach && hyp(q.ps.vx, q.ps.vz) < 1.8) { puller = q; break; }
         }
         site.def = puller ? site.def + dt / CP.defuseTime : Math.max(0, site.def - dt);
         if (site.def >= 1) {
@@ -856,7 +856,7 @@ export class CampaignRules {
       if (C.t <= 0) C.go = true;
       return;
     }
-    const step = CP.boss.chargeSpeed * dt, dx = C.ex - p.ps.x, dz = C.ez - p.ps.z, d = Math.hypot(dx, dz);
+    const step = CP.boss.chargeSpeed * dt, dx = C.ex - p.ps.x, dz = C.ez - p.ps.z, d = hyp(dx, dz);
     if (d <= step + 0.05) { p.ps.x = C.ex; p.ps.z = C.ez; this.charge = null; p.ps.vx = 0; p.ps.vz = 0; this._dirty(); return; }
     p.ps.x += dx / d * step; p.ps.z += dz / d * step; p.ps.vx = dx / d * CP.boss.chargeSpeed; p.ps.vz = dz / d * CP.boss.chargeSpeed; p.ps.aim = C.a;
     for (const q of sim.players) {
@@ -913,11 +913,11 @@ export class CampaignRules {
         let fill = 0;
         for (const p of sim.players) {
           if (p.team !== 0 || p.ai || !this._up(p)) continue;
-          const dx = p.ps.x - q.ps.x, dz = p.ps.z - q.ps.z, d = Math.hypot(dx, dz);
+          const dx = p.ps.x - q.ps.x, dz = p.ps.z - q.ps.z, d = hyp(dx, dz);
           if (d > C.range) continue;
           if (d > 2.2 && Math.abs(angleDiff(Math.atan2(dz, dx), q.ps.aim)) > C.cone) continue;
           if (!hasLineOfSight(sim.map, q.ps.x, q.ps.z, p.ps.x, p.ps.z, sim.smokes)) continue;
-          const speed = Math.hypot(p.ps.vx, p.ps.vz);
+          const speed = hyp(p.ps.vx, p.ps.vz);
           let k = C.rate * (1.15 - d / C.range * 0.75) * (p.ps.sprinting ? 1.5 : speed < 0.5 ? C.crouchK : 1);
           if (p.isBot) k *= 0.5;
           fill = Math.max(fill, k);
@@ -1272,7 +1272,7 @@ export class CampaignRules {
           return this._walk(h.x + Math.cos(a) * (h.r + 2.2), h.z + Math.sin(a) * (h.r + 2.2));
         }
       } else {
-        const dx = h.x2 - h.x, dz = h.z2 - h.z, L = Math.hypot(dx, dz) || 1, ux = dx / L, uz = dz / L;
+        const dx = h.x2 - h.x, dz = h.z2 - h.z, L = hyp(dx, dz) || 1, ux = dx / L, uz = dz / L;
         const px = p.ps.x - h.x, pz = p.ps.z - h.z, along = px * ux + pz * uz, off = -px * uz + pz * ux;
         if (along > -1 && along < L + 1 && Math.abs(off) < h.r + 1) {
           const side = off >= 0 ? 1 : -1;
@@ -1332,7 +1332,7 @@ export class CampaignRules {
         tx = this.vipPath[this.vipPi]; tz = this.vipPath[this.vipPi + 1];
         if (dist(tx, tz, p.ps.x, p.ps.z) < 0.8 && this.vipPi + 2 < this.vipPath.length) this.vipPi += 2; else break;
       }
-      const dx = tx - p.ps.x, dz = tz - p.ps.z, d = Math.hypot(dx, dz);
+      const dx = tx - p.ps.x, dz = tz - p.ps.z, d = hyp(dx, dz);
       if (d > 0.2) { I.mx = dx / d * 0.45; I.mz = dz / d * 0.45; I.aim = Math.atan2(dz, dx); }
     }
     stepPlayer(p.ps, I, dt, sim.map, sim.rng);

@@ -3,7 +3,7 @@
 
 import { LETHALS, normalizeLoadout, PERK_IDS, PERKS, SCORE, STREAK_DENY_REASONS, STREAK_IDS, STREAKS, TACTICALS } from '../shared/catalog.js';
 import { FFA_MAX, FFA_TEAM, GOLDEN_ID, MAX_HP, PLAYER_RADIUS, RESPAWN_TIME, SECONDARY_IDS, SIM_HZ, SNAPSHOT_EVERY, SPAWN_PROTECT, TEAM_SIZE, WEAPON_IDS } from '../shared/constants.js';
-import { hasLineOfSight, raycastMap, rayCircle, wallsInBox, wallScratch } from '../shared/geometry.js';
+import { hasLineOfSight, raycastMap, rayCircle, wallsInBox, wallScratch, hyp } from '../shared/geometry.js';
 import { MAPS, DEFAULT_MAP } from '../shared/map.js';
 import { EX, EX_AI_TEAM, GUN_LADDER, gunLoadout, MODES, modeFitsMap, playersFor, teamSizeFor } from '../shared/modes.js';
 import { attachmentsFor, NO_ATTACHMENTS, packKit, unpackKit } from '../shared/attachments.js';
@@ -856,7 +856,7 @@ export class Sim {
       let best = pool[0], bestD = -1;
       for (const s of pool) {
         let d = Infinity;
-        for (const t of taken) d = Math.min(d, Math.hypot(t.x - s.x, t.z - s.z));
+        for (const t of taken) d = Math.min(d, hyp(t.x - s.x, t.z - s.z));
         d += this.rng() * 2;
         if (d > bestD) { bestD = d; best = s; }
       }
@@ -909,7 +909,7 @@ export class Sim {
       let nearest = FFA_FAR, seen = false;
       for (const q of this.players) {
         if (q === p || !q.alive) continue;
-        const d = Math.hypot(q.ps.x - s.x, q.ps.z - s.z);
+        const d = hyp(q.ps.x - s.x, q.ps.z - s.z);
         if (d < nearest) nearest = d;
         if (!seen && d < FFA_SIGHT && hasLineOfSight(this.map, s.x, s.z, q.ps.x, q.ps.z)) seen = true;
       }
@@ -933,7 +933,7 @@ export class Sim {
         let nearest = 200, seen = false;
         for (const q of this.players) {
           if (q.team !== enemyTeam || !q.alive) continue;
-          const d = Math.hypot(q.ps.x - s.x, q.ps.z - s.z);
+          const d = hyp(q.ps.x - s.x, q.ps.z - s.z);
           if (d < nearest) nearest = d;
           if (!seen && d < 36 && hasLineOfSight(this.map, s.x, s.z, q.ps.x, q.ps.z)) seen = true;
         }
@@ -958,14 +958,14 @@ export class Sim {
     if (this.mode === 'dom') {
       let score = 0;
       for (let i = 0; i < this.zones.length; i++) {
-        const z = this.zones[i], d = Math.hypot(z.x - s.x, z.z - s.z);
+        const z = this.zones[i], d = hyp(z.x - s.x, z.z - s.z);
         if (z.owner === p.team && d < 26) score += (26 - d) * 0.5;
         else if (z.owner === 1 - p.team && d < 20) score -= (20 - d) * 1.2;
       }
       return score;
     }
     if (this.mode === 'hard' && this.points.length) {
-      const z = this.points[0], d = Math.hypot(z.x - s.x, z.z - s.z);
+      const z = this.points[0], d = hyp(z.x - s.x, z.z - s.z);
       return d < 15 ? -(15 - d) * 2 : d < 38 ? (38 - d) * 0.18 : 0;
     }
     return 0;
@@ -1141,7 +1141,7 @@ export class Sim {
     for (let i = 0; i < this.players.length; i++) {
       const q = this.players[i];
       if (q === p || q.team !== p.team || !q.alive || !hasPro(q.ps, 'quickmend')) continue;
-      if (Math.hypot(q.ps.x - p.ps.x, q.ps.z - p.ps.z) <= MEDIC_REACH) return true;
+      if (hyp(q.ps.x - p.ps.x, q.ps.z - p.ps.z) <= MEDIC_REACH) return true;
     }
     return false;
   }
@@ -1334,8 +1334,8 @@ export class Sim {
       const z = this.points[i];
       if (z.owner !== killer.team) continue;
       const reach = z.r + DEFEND_REACH;
-      const near = Math.hypot(victim.ps.x - z.x, victim.ps.z - z.z) <= reach
-        || Math.hypot(killer.ps.x - z.x, killer.ps.z - z.z) <= z.r;
+      const near = hyp(victim.ps.x - z.x, victim.ps.z - z.z) <= reach
+        || hyp(killer.ps.x - z.x, killer.ps.z - z.z) <= z.r;
       if (!near) continue;
       addScore(killer.score, SCORE.defend);
       this._medal(killer, 'defend');
@@ -1413,7 +1413,7 @@ export class Sim {
     const p = this.byId.get(id);
     if (!p || p.isBot || !p.alive) return;
     if (p.ackT > 0) {
-      if (Math.hypot(d.x - p.ackX, d.z - p.ackZ) > 5) return;
+      if (hyp(d.x - p.ackX, d.z - p.ackZ) > 5) return;
       p.ackT = 0;
     }
     const ps = p.ps;
@@ -1487,7 +1487,7 @@ export class Sim {
     if (this.range) { ps.tacticalLeft = TACTICALS[ps.tactical].count; ps.lethalLeft = LETHALS[ps.lethal].count; }
     if (!heal) p.spawnProtect = 0;
     // Trust the phone's own hand position, unless it is implausibly far from what the host knows.
-    const near = Number.isFinite(ox) && Number.isFinite(oz) && Math.hypot(ox - ps.x, oz - ps.z) <= THROW_ORIGIN_SLACK;
+    const near = Number.isFinite(ox) && Number.isFinite(oz) && hyp(ox - ps.x, oz - ps.z) <= THROW_ORIGIN_SLACK;
     const reach = maxThrowRange(ps.perks);
     const want = Number.isFinite(dist) ? Math.min(dist, reach) : undefined;
     this.eq.throw(p, kind, near ? ox : ps.x, near ? oz : ps.z, aim, want);
@@ -1574,7 +1574,7 @@ export class Sim {
       let dmg = 0, dist = 0, head = false;
       for (let j = i; j < rays.length; j++) {
         if (rays[j].hit !== 'player' || rays[j].id !== targetId) continue;
-        dist = Math.hypot(rays[j].x - shot.ox, rays[j].z - shot.oz);
+        dist = hyp(rays[j].x - shot.ox, rays[j].z - shot.oz);
         // Falloff, the lethal head multiplier and what cover took off the round: see the ray contract in player.js.
         dmg += rayDamage(w, rays[j], dist, ads);
         if (rays[j].head) head = true;
@@ -1588,7 +1588,7 @@ export class Sim {
   // `targets` are the same rewound positions the ray was traced against.
   _detonate(shooter, shot, ray, w, targets) {
     const b = w.explosive, blast = { radius: b.radius, inner: b.inner ?? 0, max: b.damage, min: b.min ?? 0 };
-    const dist = Math.hypot(ray.x - shot.ox, ray.z - shot.oz), back = Math.min(0.2, dist);
+    const dist = hyp(ray.x - shot.ox, ray.z - shot.oz), back = Math.min(0.2, dist);
     const x = ray.x - (ray.x - shot.ox) / Math.max(dist, 1e-6) * back;
     const z = ray.z - (ray.z - shot.oz) / Math.max(dist, 1e-6) * back;
     this._emit({ t: 'explosion', x: round2(x), z: round2(z), radius: b.radius, by: shooter.id, weapon: shot.weapon });
@@ -1596,16 +1596,16 @@ export class Sim {
     for (let i = 0; i < targets.length; i++) {
       const e = targets[i];
       if (!e.alive || e.team === shooter.team) continue;
-      const d = Math.hypot(e.x - x, e.z - z);
+      const d = hyp(e.x - x, e.z - z);
       if (d >= b.radius || !hasLineOfSight(this.map, x, z, e.x, e.z)) continue;
       if (V9.domeCovers(this, e.x, e.z, e.team) && !V9.domeCovers(this, x, z, e.team)) continue;   // Aegis Dome.
       const q = this.players[i];
-      this._damage(q, shooter, blastDamage(blast, d, q.ps.perks), shot.weapon, Math.hypot(e.x - shot.ox, e.z - shot.oz));
+      this._damage(q, shooter, blastDamage(blast, d, q.ps.perks), shot.weapon, hyp(e.x - shot.ox, e.z - shot.oz));
     }
     for (let i = this.turrets.length - 1; i >= 0; i--) {
       const t = this.turrets[i];
       if (t.team === shooter.team) continue;
-      const d = Math.hypot(t.x - x, t.z - z);
+      const d = hyp(t.x - x, t.z - z);
       if (d < b.radius && hasLineOfSight(this.map, x, z, t.x, t.z)) this._hurtTurret(t, blastDamage(blast, d), shooter);
     }
   }
@@ -1614,7 +1614,7 @@ export class Sim {
   _shootGear(shooter, shot, rays, w) {
     for (let i = 0; i < rays.length; i++) {
       const r = rays[i], a = shot.angles[i], dx = Math.cos(a), dz = Math.sin(a);
-      const len = Math.hypot(r.x - shot.ox, r.z - shot.oz);
+      const len = hyp(r.x - shot.ox, r.z - shot.oz);
       this.eq.shootDevices(shot.ox, shot.oz, dx, dz, len, shooter.team, shooter.id, this._onEqEvent);
       this.eq.shootCover(shot.ox, shot.oz, dx, dz, len, shooter.team, shooter.id, w.damage, this._onEqEvent);
     }
@@ -1626,7 +1626,7 @@ export class Sim {
     let hits = null;
     for (let i = 0; i < rays.length; i++) {
       const r = rays[i], dirX = Math.cos(shot.angles[i]), dirZ = Math.sin(shot.angles[i]);
-      let bestT = Math.hypot(r.x - shot.ox, r.z - shot.oz), best = null;
+      let bestT = hyp(r.x - shot.ox, r.z - shot.oz), best = null;
       for (let k = 0; k < this.turrets.length; k++) {
         const t = this.turrets[k];
         if (t.team === shooter.team) continue;
@@ -1649,7 +1649,7 @@ export class Sim {
       // the way to the turret. The ray's own pen was worked out to its old end point, beyond the turret, so redo it.
       const pen = shotPassage(this.map, shot.ox, shot.oz, rays[i].x, rays[i].z, w) || 1;
       TURRET_RAY.pen = pen;
-      this._hurtTurret(t, rayDamage(w, TURRET_RAY, Math.hypot(rays[i].x - shot.ox, rays[i].z - shot.oz), ads), shooter);
+      this._hurtTurret(t, rayDamage(w, TURRET_RAY, hyp(rays[i].x - shot.ox, rays[i].z - shot.oz), ads), shooter);
     }
   }
 
@@ -1940,10 +1940,10 @@ export class Sim {
     const target = this.byId.get(targetId), owner = this.byId.get(ownerId);
     if (!target || !owner) return;
     // Wave 5's Napalm fuel burns for the streak that laid it, not as thrown kit.
-    if (kind === 'napalm') { this._damage(target, owner, dmg, owner.ps.weapon, Math.hypot(owner.ps.x - target.ps.x, owner.ps.z - target.ps.z), 'napalm'); return; }
+    if (kind === 'napalm') { this._damage(target, owner, dmg, owner.ps.weapon, hyp(owner.ps.x - target.ps.x, owner.ps.z - target.ps.z), 'napalm'); return; }
     // Aegis Dome: an enemy blast does not reach its team inside (burns and gas still do).
     if (EQUIPMENT[kind]?.blast && V9.domeCovers(this, target.ps.x, target.ps.z, target.team)) return;
-    const dist = Math.hypot(owner.ps.x - target.ps.x, owner.ps.z - target.ps.z);
+    const dist = hyp(owner.ps.x - target.ps.x, owner.ps.z - target.ps.z);
     this._damage(target, owner, dmg, owner.ps.weapon, dist, null, false, kind);
   }
 
@@ -1954,7 +1954,7 @@ export class Sim {
     for (let i = this.turrets.length - 1; i >= 0; i--) {
       const t = this.turrets[i];
       if (t.team === thrower.team) continue;
-      const d = Math.hypot(t.x - bang.x, t.z - bang.z);
+      const d = hyp(t.x - bang.x, t.z - bang.z);
       if (d >= bang.r || !hasLineOfSight(this.map, bang.x, bang.z, t.x, t.z)) continue;
       this._hurtTurret(t, EQUIPMENT[bang.kind].shock ? SHOCK_TURRET : blastDamage(EQUIPMENT[bang.kind].blast, d));
     }
@@ -2120,7 +2120,7 @@ export class Sim {
 
   // Cold Blooded: automated streaks do not pick you out unless you are close to the machine doing the picking.
   _coldHidden(q, x, z) {
-    return q.ps.perks.includes('coldblood') && Math.hypot(q.ps.x - x, q.ps.z - z) > COLD_REACH;
+    return q.ps.perks.includes('coldblood') && hyp(q.ps.x - x, q.ps.z - z) > COLD_REACH;
   }
 
   _engineerMult(p, mult) { return p.ps.perks.includes('engineer') ? mult : 1; }
@@ -2168,7 +2168,7 @@ export class Sim {
     this._emit({ t: 'streak', id: p.id, kind: 'resupply', team: p.team, x: round2(p.ps.x), z: round2(p.ps.z) });
     for (let i = 0; i < this.players.length; i++) {
       const q = this.players[i];
-      if (q.team !== p.team || !q.alive || Math.hypot(q.ps.x - p.ps.x, q.ps.z - p.ps.z) > SUPPLY_RADIUS) continue;
+      if (q.team !== p.team || !q.alive || hyp(q.ps.x - p.ps.x, q.ps.z - p.ps.z) > SUPPLY_RADIUS) continue;
       q.hp = MAX_HP;
       this._emit({ t: 'heal', id: q.id });
       const extra = q.ps.perks.includes('bandolier') ? 1 : 0;
@@ -2239,7 +2239,7 @@ export class Sim {
     for (let i = 0; i < this.players.length; i++) {
       const q = this.players[i];
       if (q.team === t.team || !q.alive || !hasPro(q.ps, 'engineer')) continue;
-      if (Math.hypot(q.ps.x - t.x, q.ps.z - t.z) <= HIJACK_REACH) { who = q; break; }
+      if (hyp(q.ps.x - t.x, q.ps.z - t.z) <= HIJACK_REACH) { who = q; break; }
     }
     if (!who) { t.hackT = 0; t.hackBy = null; return false; }
     t.hackT = t.hackBy === who ? (t.hackT ?? 0) + STEP : STEP;
@@ -2257,7 +2257,7 @@ export class Sim {
     for (let i = 0; i < this.players.length; i++) {
       const q = this.players[i];
       if (q.team === t.team || !q.alive || q.spawnProtect > 0 || this._coldHidden(q, t.x, t.z)) continue;
-      const d = Math.hypot(q.ps.x - t.x, q.ps.z - t.z);
+      const d = hyp(q.ps.x - t.x, q.ps.z - t.z);
       if (d < bestD && hasLineOfSight(this.map, t.x, t.z, q.ps.x, q.ps.z, this.eq.smokes)) { bestD = d; best = q; }
     }
     return best;
@@ -2343,7 +2343,7 @@ export class Sim {
     const seen = this._teamVisible(g.team);
     let tx = g.owner.alive ? g.owner.ps.x : g.cx, tz = g.owner.alive ? g.owner.ps.z : g.cz;
     if (seen.length) { tx = 0; tz = 0; for (const q of seen) { tx += q.ps.x; tz += q.ps.z; } tx /= seen.length; tz /= seen.length; }
-    const dx = tx - g.cx, dz = tz - g.cz, d = Math.hypot(dx, dz), m = Math.min(d, 3 * STEP);
+    const dx = tx - g.cx, dz = tz - g.cz, d = hyp(dx, dz), m = Math.min(d, 3 * STEP);
     if (d > 1e-3) { g.cx += dx / d * m; g.cz += dz / d * m; }
     g.x = Math.max(1, Math.min(W - 1, g.cx + Math.cos(g.angle) * R));
     g.z = Math.max(1, Math.min(H - 1, g.cz + Math.sin(g.angle) * R));
@@ -2388,7 +2388,7 @@ export class Sim {
     for (let i = 0; i < seen.length; i++) {
       const q = seen[i];
       if (!q.alive || this._coldHidden(q, g.x, g.z)) continue;
-      const score = Math.hypot(q.ps.x - g.x, q.ps.z - g.z) + this.rng() * 12;
+      const score = hyp(q.ps.x - g.x, q.ps.z - g.z) + this.rng() * 12;
       if (score < bestScore) { bestScore = score; best = q; }
     }
     return best;
@@ -2399,7 +2399,7 @@ export class Sim {
     for (let i = 0; i < this.players.length; i++) {
       const a = this.players[i];
       if (a.team !== team || !a.alive) continue;
-      if (Math.hypot(a.ps.x - q.ps.x, a.ps.z - q.ps.z) > GUNSHIP_EYES) continue;
+      if (hyp(a.ps.x - q.ps.x, a.ps.z - q.ps.z) > GUNSHIP_EYES) continue;
       if (hasLineOfSight(this.map, a.ps.x, a.ps.z, q.ps.x, q.ps.z, this.eq.smokes)) return true;
     }
     return false;
@@ -2416,7 +2416,7 @@ export class Sim {
     for (let i = 0; i < this.players.length; i++) {
       const p = this.players[i];
       if (p.team === g.team || !p.alive) continue;
-      const d = Math.hypot(p.ps.x - x, p.ps.z - z);
+      const d = hyp(p.ps.x - x, p.ps.z - z);
       if (d < bestD) { bestD = d; victim = p; }
     }
     if (victim) this._damage(victim, g.owner, GUNSHIP_DAMAGE, g.owner.ps.weapon, bestD, 'gunship');
@@ -2431,7 +2431,7 @@ export class Sim {
     }
     const q = g.target && g.target.alive ? g.target : null;
     const gx = q ? q.ps.x : this.map.width / 2, gz = q ? q.ps.z : this.map.height / 2;
-    const dx = gx - g.x, dz = gz - g.z, d = Math.max(1e-3, Math.hypot(dx, dz));
+    const dx = gx - g.x, dz = gz - g.z, d = Math.max(1e-3, hyp(dx, dz));
     g.aim = Math.atan2(dz, dx);
     const want = d - CHOPPER_HOVER;
     if (Math.abs(want) > 0.5) {
@@ -2486,7 +2486,7 @@ export class Sim {
     for (let i = 0; i < seen.length; i++) {
       const q = seen[i];
       if (!q.alive || this._coldHidden(q, x, z)) continue;
-      let score = Math.hypot(q.ps.x - x, q.ps.z - z);
+      let score = hyp(q.ps.x - x, q.ps.z - z);
       if (q === prefer) score -= 4;                      // Stick with a chase rather than flick between two targets.
       if (avoid && avoid(q)) score += 10;                // Spread a swarm over several targets when there are several.
       if (score < bestScore) { bestScore = score; best = q; }
@@ -2537,7 +2537,7 @@ export class Sim {
       const q = this.players[i];
       if (q.team === g.team || !q.alive || q.spawnProtect > 0) continue;
       const fuse = q.ps.perks.includes('coldblood') ? MISSILE_COLD_FUSE : MISSILE_FUSE;
-      if (Math.hypot(q.ps.x - g.x, q.ps.z - g.z) <= fuse) { this._missileBlast(g, g.x, g.z); return true; }
+      if (hyp(q.ps.x - g.x, q.ps.z - g.z) <= fuse) { this._missileBlast(g, g.x, g.z); return true; }
     }
     return false;
   }
@@ -2575,7 +2575,7 @@ export class Sim {
       tx = (o.alive ? o.ps.x : g.x) + Math.cos(a) * SWARM_LOITER;
       tz = (o.alive ? o.ps.z : g.z) + Math.sin(a) * SWARM_LOITER;
     }
-    const dx = tx - g.x, dz = tz - g.z, d = Math.hypot(dx, dz);
+    const dx = tx - g.x, dz = tz - g.z, d = hyp(dx, dz);
     if (d > 1e-3) {
       const m = Math.min(SWARM_SPEED * STEP, d);
       g.aim = Math.atan2(dz, dx);
@@ -2641,14 +2641,14 @@ export class Sim {
     for (const a of pool) {
       let count = 0, sumX = 0, sumZ = 0;
       for (const b of pool) {
-        if (Math.hypot(a.ps.x - b.ps.x, a.ps.z - b.ps.z) < 9) { count++; sumX += b.ps.x; sumZ += b.ps.z; }
+        if (hyp(a.ps.x - b.ps.x, a.ps.z - b.ps.z) < 9) { count++; sumX += b.ps.x; sumZ += b.ps.z; }
       }
       if (count > bestCount) { bestCount = count; best = { x: sumX / count, z: sumZ / count }; }
     }
     if (!best) return null;
     let spreadX = 0, spreadZ = 0;
     for (const b of pool) {
-      if (Math.hypot(b.ps.x - best.x, b.ps.z - best.z) > 9) continue;
+      if (hyp(b.ps.x - best.x, b.ps.z - best.z) > 9) continue;
       spreadX = Math.max(spreadX, Math.abs(b.ps.x - best.x));
       spreadZ = Math.max(spreadZ, Math.abs(b.ps.z - best.z));
     }
@@ -2668,7 +2668,7 @@ export class Sim {
       this.eq.setOffMines(s.x, s.z, s.radius);
       for (const q of this.players) {
         if (q.team === s.team || !q.alive) continue;
-        const d = Math.hypot(q.ps.x - s.x, q.ps.z - s.z);
+        const d = hyp(q.ps.x - s.x, q.ps.z - s.z);
         if (d > s.radius) continue;
         // Hard cover protects: a building between you and the blast saves your life. So does an Aegis Dome.
         if (!hasLineOfSight(this.map, s.x, s.z, q.ps.x, q.ps.z)) continue;
@@ -2679,7 +2679,7 @@ export class Sim {
       for (let k = this.turrets.length - 1; k >= 0; k--) {
         const t = this.turrets[k];
         if (t.team === s.team) continue;
-        const d = Math.hypot(t.x - s.x, t.z - s.z);
+        const d = hyp(t.x - s.x, t.z - s.z);
         if (d <= s.radius && hasLineOfSight(this.map, s.x, s.z, t.x, t.z) && !V9.domeCovers(this, t.x, t.z, t.team)) this._hurtTurret(t, s.damage);
       }
     }
@@ -3441,7 +3441,7 @@ export class Sim {
     if (!this.interest || !g) return events;
     const out = [];
     for (const e of events) {
-      if (e.t === 'shot' && Math.hypot(e.ox - g.ps.x, e.oz - g.ps.z) > EVENT_FAR && this.byId.get(e.by)?.team !== g.team) continue;
+      if (e.t === 'shot' && hyp(e.ox - g.ps.x, e.oz - g.ps.z) > EVENT_FAR && this.byId.get(e.by)?.team !== g.team) continue;
       out.push(e);
     }
     return out;

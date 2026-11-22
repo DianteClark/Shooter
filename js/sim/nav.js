@@ -2,7 +2,7 @@
 // (cover and angle-holding spots) bots reason about. Search state lives in typed arrays allocated once.
 
 import { PLAYER_RADIUS } from '../shared/constants.js';
-import { hasLineOfSight, raycastMap } from '../shared/geometry.js';
+import { hasLineOfSight, raycastMap, hyp } from '../shared/geometry.js';
 
 const CELL = 1;
 const CLEARANCE = PLAYER_RADIUS + 0.2;
@@ -106,7 +106,7 @@ export class NavGrid {
         if (near[k] & bit) return;
         const nx = Math.max(r.x, Math.min(cx, r.x + r.w));
         const nz = Math.max(r.z, Math.min(cz, r.z + r.d));
-        if (Math.hypot(cx - nx, cz - nz) <= 1.6) near[k] |= bit;
+        if (hyp(cx - nx, cz - nz) <= 1.6) near[k] |= bit;
       });
     }
     for (let j = 0; j < h; j++) {
@@ -160,7 +160,7 @@ export class NavGrid {
           const k = j * w + i;
           if (this.blocked[k] || grid[k]) continue;
           const cx = i + 0.5, cz = j + 0.5;
-          if (Math.hypot(cx - t.x, cz - t.z) <= DANGER_RANGE && hasLineOfSight(map, t.x, t.z, cx, cz)) grid[k] = 1;
+          if (hyp(cx - t.x, cz - t.z) <= DANGER_RANGE && hasLineOfSight(map, t.x, t.z, cx, cz)) grid[k] = 1;
         }
       }
     }
@@ -206,7 +206,7 @@ export class NavGrid {
   // With `danger`, a straight shortcut may not cross cells that map marks and the path around avoided.
   segmentClear(ax, az, bx, bz, danger = null) {
     const dx = bx - ax, dz = bz - az;
-    const len = Math.hypot(dx, dz);
+    const len = hyp(dx, dz);
     const steps = Math.ceil(len / 0.4);
     for (let s = 1; s < steps; s++) {
       const t = s / steps;
@@ -437,7 +437,7 @@ export class NavGrid {
     const bx = regionX[b], bz = regionZ[b];
     let size = 0;
     rG[a] = 0; rStamp[a] = id; rParent[a] = -1;
-    rHeap[0] = a; rHeapF[0] = Math.hypot(regionX[a] - bx, regionZ[a] - bz); size = 1;
+    rHeap[0] = a; rHeapF[0] = hyp(regionX[a] - bx, regionZ[a] - bz); size = 1;
     let found = false;
     while (size > 0) {
       const cur = rHeap[0];
@@ -460,10 +460,10 @@ export class NavGrid {
       for (let e = linkStart[cur]; e < linkStart[cur + 1]; e++) {
         const r = linkTo[e];
         if (rClosed[r] === id) continue;
-        const cost = rG[cur] + Math.hypot(regionX[r] - regionX[cur], regionZ[r] - regionZ[cur]);
+        const cost = rG[cur] + hyp(regionX[r] - regionX[cur], regionZ[r] - regionZ[cur]);
         if (rStamp[r] === id && rG[r] <= cost) continue;
         rStamp[r] = id; rG[r] = cost; rParent[r] = cur;
-        const f = cost + Math.hypot(regionX[r] - bx, regionZ[r] - bz);
+        const f = cost + hyp(regionX[r] - bx, regionZ[r] - bz);
         let i = size++;
         while (i > 0) { const q = (i - 1) >> 1; if (rHeapF[q] <= f) break; rHeap[i] = rHeap[q]; rHeapF[i] = rHeapF[q]; i = q; }
         rHeap[i] = r; rHeapF[i] = f;
@@ -486,11 +486,11 @@ export class NavGrid {
     const ix = this.coverIndex, n = ix.near(x, z, maxDist);
     for (let q = 0; q < n; q++) {
       const c = this.cover[ix.out[q]];
-      const d = Math.hypot(c.x - x, c.z - z);
+      const d = hyp(c.x - x, c.z - z);
       if (d > maxDist) continue;
       if (hasLineOfSight(this.map, c.x, c.z, threatX, threatZ)) continue;
       // Prefer close cover that does not mean running toward the threat.
-      const towardThreat = Math.hypot(threatX - c.x, threatZ - c.z) < Math.hypot(threatX - x, threatZ - z) ? 5 : 0;
+      const towardThreat = hyp(threatX - c.x, threatZ - c.z) < hyp(threatX - x, threatZ - z) ? 5 : 0;
       const score = d + towardThreat + rng() * 2.5;
       if (score < bestScore) { bestScore = score; best = c; }
     }

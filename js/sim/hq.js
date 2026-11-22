@@ -9,6 +9,7 @@
 import { SCORE } from '../shared/catalog.js';
 import { addScore } from './streaks.js';
 import { closestBot, decodeStats, encodeStats, makeZones, packZone, restoreStats, seededOrder, unpackZone, zoneObjective } from './mode-kit.js';
+import { hyp } from '../shared/geometry.js';
 
 export const HQ = { capture: 8, destroy: 8, life: 75, gap: 5, crowd: 3, destroyScore: 150 };
 const PHASES = ['capture', 'held', 'gap'];
@@ -117,7 +118,7 @@ export class HqRules {
   // Never spawn on the HQ; the side holding it would not get to anyway.
   spawnFlow(p, s) {
     if (this.phase === 'gap') return 0;
-    const z = this.zone, d = Math.hypot(z.x - s.x, z.z - s.z);
+    const z = this.zone, d = hyp(z.x - s.x, z.z - s.z);
     return d < 16 ? -(16 - d) * 2.5 : d < 40 ? (40 - d) * 0.15 : 0;
   }
 

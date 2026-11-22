@@ -12,7 +12,7 @@
 // Events: {t:'zoracle', by, order}, {t:'zlantern', state: 0 wrong | 2 burnt out, i?, by?}, {t:'zcharge', x, z, a, len,
 // w, wind, dash} (the lane, as the charge winds up), {t:'zwhirl', x, z, r, life}, {t:'zfx', k: 'whirlpop', x, z, r}.
 import { ZM, ZE, ZK, ZM_BARKER, ZM_WONDERS, NO_GUN, clawDmg, isBossKind } from '../shared/zombies.js';
-import { hasLineOfSight } from '../shared/geometry.js';
+import { hasLineOfSight, hyp } from '../shared/geometry.js';
 
 const r2 = v => Math.round(v * 100) / 100;
 const bits = n => { let c = 0; for (; n; n &= n - 1) c++; return c; };
@@ -95,7 +95,7 @@ export function stepBarker(E, w, dt) {
       if (c.hit.has(p.index) || !p.alive || p.downed || p.away) continue;
       // Within the lane's half width of the stretch it has run so far.
       const t = Math.max(0, Math.min(c.len * k, (p.ps.x - c.x) * cx + (p.ps.z - c.z) * cz));
-      if (Math.hypot(p.ps.x - c.x - cx * t, p.ps.z - c.z - cz * t) > P.w / 2 + 0.25) continue;
+      if (hyp(p.ps.x - c.x - cx * t, p.ps.z - c.z - cz * t) > P.w / 2 + 0.25) continue;
       c.hit.add(p.index);
       sim._damage(p, w, P.dmg * clawDmg(ZK.barker, R.round) / ZM.kinds.barker.dmg, NO_GUN, 0);
     }
@@ -108,7 +108,7 @@ export function stepBarker(E, w, dt) {
   let tgt = null, td = P.range;
   for (const p of R.crew) {
     if (!p.alive || p.downed || p.away) continue;
-    const d = Math.hypot(p.ps.x - w.ps.x, p.ps.z - w.ps.z);
+    const d = hyp(p.ps.x - w.ps.x, p.ps.z - w.ps.z);
     if (d < td && d > 2.5 && hasLineOfSight(sim.map, w.ps.x, w.ps.z, p.ps.x, p.ps.z)) { td = d; tgt = p; }
   }
   if (!tgt) { q.chargeT = 0.8; return; }
@@ -160,7 +160,7 @@ export function stepWhirls(E, dt) {
     if (tick) v.acc = 0;
     for (const q of R.horde) {
       if (!q.alive) continue;
-      const dx = v.x - q.ps.x, dz = v.z - q.ps.z, d = Math.hypot(dx, dz);
+      const dx = v.x - q.ps.x, dz = v.z - q.ps.z, d = hyp(dx, dz);
       if (d > W.r) continue;
       if (!isBossKind(q.zk) && d > 0.3 && hasLineOfSight(sim.map, q.ps.x, q.ps.z, v.x, v.z)) {
         // Dragged in, faster toward the edge: it can neither walk out nor claw while it spins.
@@ -175,7 +175,7 @@ export function stepWhirls(E, dt) {
     sim._emit({ t: 'zfx', k: 'whirlpop', x: r2(v.x), z: r2(v.z), r: W.popR });
     if (!owner?.zm) continue;
     for (const q of R.horde) {
-      if (!q.alive || Math.hypot(q.ps.x - v.x, q.ps.z - v.z) > W.popR || !hasLineOfSight(sim.map, v.x, v.z, q.ps.x, q.ps.z)) continue;
+      if (!q.alive || hyp(q.ps.x - v.x, q.ps.z - v.z) > W.popR || !hasLineOfSight(sim.map, v.x, v.z, q.ps.x, q.ps.z)) continue;
       sim._damage(q, owner, isBossKind(q.zk) ? Math.max(1, q.zMax * W.boss * 2) : R.hp * W.pop, W.gun, 0, 'zfx');
     }
   }

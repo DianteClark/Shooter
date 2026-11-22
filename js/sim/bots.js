@@ -11,7 +11,7 @@
 
 import { stalkInput } from './finishers.js';
 import { streakMoment, thinkAir, thinkStrikes } from './bot-streaks.js';
-import { hasLineOfSight, raycastMap } from '../shared/geometry.js';
+import { hasLineOfSight, raycastMap, hyp } from '../shared/geometry.js';
 import { effectRadius, landingOf, maxThrowRange, EQUIPMENT, SHOOTABLE, tripBeam } from './equipment.js';
 import { ADS_STICK_FULL, angleDiff, shotPassage, stepPlayer, weaponDef } from './player.js';
 import { WEAPONS } from '../shared/weapons.js';
@@ -371,7 +371,7 @@ function planTags(sim, team, crew) {
   for (let b = 0; b < crew.length; b++) {
     const bot = crew[b], ps = bot.ps;
     for (let t = 0; t < sim.tags.length; t++) {
-      const tag = sim.tags[t], d = Math.hypot(tag.x - ps.x, tag.z - ps.z);
+      const tag = sim.tags[t], d = hyp(tag.x - ps.x, tag.z - ps.z);
       const own = tag.team === team;
       // Confirming scores; denying only prevents, so nobody crosses the map for it.
       if (d > (own ? Math.min(bot.S.tagSight, DENY_REACH) : bot.S.tagSight)) continue;
@@ -409,7 +409,7 @@ function sndPlan(sim, team) {
 function nearestSite(sites, x, z, maxD = Infinity) {
   let best = -1, bestD = maxD;
   for (let i = 0; i < sites.length; i++) {
-    const d = Math.hypot(sites[i].x - x, sites[i].z - z);
+    const d = hyp(sites[i].x - x, sites[i].z - z);
     if (d < bestD) { bestD = d; best = i; }
   }
   return best;
@@ -434,7 +434,7 @@ function planSnd(sim, team, crew) {
     for (const bot of order) {
       const df = snd.defuse;
       if (!attacking && df.p === bot.p && SND.defuse - df.t < bomb.fuse - 0.2) { bot.setObjective({ key: 'defuse', x: bomb.x, z: bomb.z, r: SND.defuseReach * 0.6, role: 'defuse' }); continue; }
-      const dx = bot.ps.x - bomb.x, dz = bot.ps.z - bomb.z, d = Math.max(0.5, Math.hypot(dx, dz));
+      const dx = bot.ps.x - bomb.x, dz = bot.ps.z - bomb.z, d = Math.max(0.5, hyp(dx, dz));
       const away = walkable(sim, bomb.x + dx / d * (SND.blast + 6), bomb.z + dz / d * (SND.blast + 6));
       bot.setObjective({ key: 'flee', x: away.x, z: away.z, r: 2.5, role: 'attack' });
     }
@@ -455,12 +455,12 @@ function planSnd(sim, team, crew) {
     if (bomb.state === 'dropped') {
       let bestD = Infinity;
       for (const bot of order) {
-        const d = Math.hypot(bot.ps.x - bomb.x, bot.ps.z - bomb.z);
+        const d = hyp(bot.ps.x - bomb.x, bot.ps.z - bomb.z);
         if (d < bestD) { bestD = d; fetcher = bot; }
       }
       fetcher?.setObjective({ key: `bomb${Math.round(bomb.x)}_${Math.round(bomb.z)}`, x: bomb.x, z: bomb.z, r: 0, role: 'collect' });
     }
-    const near = carrier && Math.hypot(carrier.ps.x - site.x, carrier.ps.z - site.z) < 14;
+    const near = carrier && hyp(carrier.ps.x - site.x, carrier.ps.z - site.z) < 14;
     let entry = 0;
     for (const bot of order) {
       if (bot === fetcher) continue;
@@ -470,7 +470,7 @@ function planSnd(sim, team, crew) {
         bot.setObjective({ key: `site${site.id}`, x: site.x, z: site.z, r: site.r + 4, role: 'attack' });
         continue;
       }
-      const dx = site.x - carrier.ps.x, dz = site.z - carrier.ps.z, d = Math.max(0.5, Math.hypot(dx, dz));
+      const dx = site.x - carrier.ps.x, dz = site.z - carrier.ps.z, d = Math.max(0.5, hyp(dx, dz));
       const at = walkable(sim, carrier.ps.x + dx / d * ESCORT_LEAD, carrier.ps.z + dz / d * ESCORT_LEAD);
       bot.setObjective({ key: `esc${Math.round(at.x / 6)}_${Math.round(at.z / 6)}`, x: at.x, z: at.z, r: 3.5, role: 'attack' });
     }
@@ -483,7 +483,7 @@ function planSnd(sim, team, crew) {
     // cannot wait any longer.
     let defuser = null, bestD = Infinity;
     for (const bot of order) {
-      const d = Math.hypot(bot.ps.x - bomb.x, bot.ps.z - bomb.z);
+      const d = hyp(bot.ps.x - bomb.x, bot.ps.z - bomb.z);
       if (d < bestD) { bestD = d; defuser = bot; }
     }
     for (const bot of order) {
@@ -582,14 +582,14 @@ function ctfRunObjective(sim, team, bot, plan, crew) {
         if (Math.abs(s.z - lane.z) < 7) danger++;
       }
       const at = walkable(sim, midX, lane.z);
-      const cost = danger * 14 + Math.hypot(at.x - ps.x, at.z - ps.z) + Math.hypot(home.x - at.x, home.z - at.z) + sim.rng() * 4;
+      const cost = danger * 14 + hyp(at.x - ps.x, at.z - ps.z) + hyp(home.x - at.x, home.z - at.z) + sim.rng() * 4;
       if (cost < bestCost) { bestCost = cost; best = { id: bot.p.id, lane: lane.id ?? lane.z, x: at.x, z: at.z, done: false }; }
     }
     route = plan.route = best;
   }
   if (!route || route.done) return direct;
   // Past the waypoint (or closer to home than it already): straight home.
-  if (Math.hypot(route.x - ps.x, route.z - ps.z) < CTF_ROUTE_DONE || Math.hypot(home.x - ps.x, home.z - ps.z) < Math.hypot(home.x - route.x, home.z - route.z)) {
+  if (hyp(route.x - ps.x, route.z - ps.z) < CTF_ROUTE_DONE || hyp(home.x - ps.x, home.z - ps.z) < hyp(home.x - route.x, home.z - route.z)) {
     route.done = true;
     return direct;
   }
@@ -629,11 +629,11 @@ function planCtf(sim, team, crew) {
   // Our flag in their hands: run the carrier down.
   if (own.state === 'carried' && own.carrier) {
     const c = own.carrier.ps;
-    const dx = away.x - c.x, dz = away.z - c.z, d = Math.max(0.5, Math.hypot(dx, dz));
+    const dx = away.x - c.x, dz = away.z - c.z, d = Math.max(0.5, hyp(dx, dz));
     const lead = Math.min(CTF_CUT, d);
     const cut = walkable(sim, c.x + dx / d * lead, c.z + dz / d * lead);
     let plain = 0;
-    for (const bot of [...free].sort((a, b) => Math.hypot(a.ps.x - c.x, a.ps.z - c.z) - Math.hypot(b.ps.x - c.x, b.ps.z - c.z))) {
+    for (const bot of [...free].sort((a, b) => hyp(a.ps.x - c.x, a.ps.z - c.z) - hyp(b.ps.x - c.x, b.ps.z - c.z))) {
       if (bot.S.objRotate) {
         // Whoever is already behind the runner closes on them; whoever is ahead cuts the road home.
         const ahead = (bot.ps.x - c.x) * dx + (bot.ps.z - c.z) * dz > 0;
@@ -647,7 +647,7 @@ function planCtf(sim, team, crew) {
 
   // Escorts for our runner, from the tiers that think about it.
   if (runner && own.state === 'home') {
-    const r = runner.ps, dx = home.x - r.x, dz = home.z - r.z, d = Math.max(0.5, Math.hypot(dx, dz));
+    const r = runner.ps, dx = home.x - r.x, dz = home.z - r.z, d = Math.max(0.5, hyp(dx, dz));
     const at = walkable(sim, r.x + dx / d * Math.min(CTF_ESCORT_LEAD, d), r.z + dz / d * Math.min(CTF_ESCORT_LEAD, d));
     let n = 0;
     for (const bot of [...free]) {
@@ -692,14 +692,14 @@ function ctfFlank(sim, bot, away) {
   const home = sim.ctf.bases[bot.p.team], span = away.x - home.x;
   const at = walkable(sim, home.x + span * CTF_FLANK_STAGE, lanes[bot.ctfLane].z);
   // Past the waypoint, or close to it: straight in from here.
-  if ((ps.x - home.x) / span >= CTF_FLANK_STAGE - 0.05 || Math.hypot(at.x - ps.x, at.z - ps.z) < 6) { bot.ctfLane = -1; return null; }
+  if ((ps.x - home.x) / span >= CTF_FLANK_STAGE - 0.05 || hyp(at.x - ps.x, at.z - ps.z) < 6) { bot.ctfLane = -1; return null; }
   return { key: `flank${bot.ctfLane}`, x: at.x, z: at.z, r: 3, role: 'attack', commit: true };
 }
 
 function closestBot(free, x, z) {
   let best = null, bestD = Infinity;
   for (const bot of free) {
-    const d = Math.hypot(bot.ps.x - x, bot.ps.z - z);
+    const d = hyp(bot.ps.x - x, bot.ps.z - z);
     if (d < bestD) { bestD = d; best = bot; }
   }
   return best;
@@ -756,7 +756,7 @@ function planDomination(sim, team, crew) {
     let best = targets[0], bestCost = Infinity;
     for (let i = 0; i < targets.length; i++) {
       const z = targets[i];
-      const cost = Math.hypot(z.x - bot.ps.x, z.z - bot.ps.z) + (load.get(z) || 0) * bot.S.objSplit + (z.owner === 1 - team ? 5 : 0);
+      const cost = hyp(z.x - bot.ps.x, z.z - bot.ps.z) + (load.get(z) || 0) * bot.S.objSplit + (z.owner === 1 - team ? 5 : 0);
       if (cost < bestCost) { bestCost = cost; best = z; }
     }
     load.set(best, (load.get(best) || 0) + 1);
@@ -919,7 +919,7 @@ export class BotBrain {
   onGunshot(shooter, suppressed = false) {
     const { S, ps, sim } = this, q = shooter.ps;
     if (this.targetVisible || sim.time - this.heardT < HEAR_GAP) return;
-    const d = Math.hypot(q.x - ps.x, q.z - ps.z);
+    const d = hyp(q.x - ps.x, q.z - ps.z);
     let range = S.hearing * (suppressed ? SUPPRESSED_HEARING : 1);
     if (d > range) return;
     const walled = !hasLineOfSight(sim.map, ps.x, ps.z, q.x, q.z);
@@ -938,7 +938,7 @@ export class BotBrain {
     // Getting shot wakes you up: the next think is immediate, but reaction time still applies.
     this.thinkT = Math.min(this.thinkT, 0.05);
     if (indirect) return;
-    const dx = q.x - ps.x, dz = q.z - ps.z, d = Math.max(0.5, Math.hypot(dx, dz));
+    const dx = q.x - ps.x, dz = q.z - ps.z, d = Math.max(0.5, hyp(dx, dz));
     const bearing = Math.atan2(dz, dx) + (sim.rng() + sim.rng() - 1) * 0.28;
     const guess = d * (0.75 + 0.5 * sim.rng());
     this._note(ps.x + Math.cos(bearing) * guess, ps.z + Math.sin(bearing) * guess, false, 1 + d * 0.22);
@@ -950,9 +950,9 @@ export class BotBrain {
   onTeammateDown(victim, killer) {
     const { S, sim, ps } = this;
     if (this.targetVisible || this.objective?.commit || this.mode === 'cover' || this.flashT > 0) return;
-    const vx = victim.ps.x, vz = victim.ps.z, d = Math.hypot(vx - ps.x, vz - ps.z);
+    const vx = victim.ps.x, vz = victim.ps.z, d = hyp(vx - ps.x, vz - ps.z);
     if (d > S.tradeReach || sim.rng() >= S.trade) return;
-    const q = killer.ps, err = TRADE_ERR + Math.hypot(q.x - vx, q.z - vz) * TRADE_ERR_PER_M;
+    const q = killer.ps, err = TRADE_ERR + hyp(q.x - vx, q.z - vz) * TRADE_ERR_PER_M;
     this._rough(q.x, q.z, err, POS);
     this._note(POS.x, POS.z, false, err);
     this.thinkT = Math.min(this.thinkT, 0.1);
@@ -1012,14 +1012,14 @@ export class BotBrain {
       // Battle royale: nobody in the air is a target (js/sim/br.js).
       if (q.team === p.team || !q.alive || q.spawnProtect > 0 || q.brAir) continue;
       const dx = q.ps.x - ps.x, dz = q.ps.z - ps.z;
-      const d = Math.hypot(dx, dz);
+      const d = hyp(dx, dz);
       if (d > sightRange) continue;
       // The aimed lead only reaches out where the sights point (the camera pans that way): a screen, not a bubble.
       if (!this.human && d > HUMAN_VIEW * sightK && d > Math.min(tierSight, HUMAN_VIEW + ADS_LOOK * ps.adsT * Math.max(0, (dx * ca + dz * sa) / d)) * sightK) continue;
       // Keeping track of someone just seen needs no cone; it stops mattering the moment they have been gone a while.
       const tracking = q === sameTarget && sim.time - this.sawT < SIGHT_KEEP;
       // Someone within arm's reach is noticed without looking only if they make a noise doing it.
-      const noisy = d <= S.close && ((Math.hypot(q.ps.vx, q.ps.vz) >= AUDIBLE_SPEED && !q.ps.perks.includes('deadsilence')) || q.ps.firingT > 0);
+      const noisy = d <= S.close && ((hyp(q.ps.vx, q.ps.vz) >= AUDIBLE_SPEED && !q.ps.perks.includes('deadsilence')) || q.ps.firingT > 0);
       const inCone = Math.abs(angleDiff(Math.atan2(dz, dx), ps.aim)) <= S.fov / 2;
       if (!tracking && !noisy && !inCone) continue;
       // Walls first, then the dice: nothing about a hidden enemy, not even whether a roll was made, reaches this bot.
@@ -1066,8 +1066,8 @@ export class BotBrain {
       const q = sim.players[i];
       if (q.team === p.team || !q.alive || q.brAir || q.downed) continue;
       const qs = q.ps;
-      if (Math.hypot(qs.vx, qs.vz) < AUDIBLE_SPEED || qs.perks.includes('deadsilence')) continue;
-      const d = Math.hypot(qs.x - ps.x, qs.z - ps.z), r = reach * (qs.sprinting ? 1 : STEP_WALK);
+      if (hyp(qs.vx, qs.vz) < AUDIBLE_SPEED || qs.perks.includes('deadsilence')) continue;
+      const d = hyp(qs.x - ps.x, qs.z - ps.z), r = reach * (qs.sprinting ? 1 : STEP_WALK);
       if (d < r && d < bestD) { bestD = d; best = q; }
     }
     if (!best) return false;
@@ -1099,7 +1099,7 @@ export class BotBrain {
     for (let i = 0; i < sim.players.length; i++) {
       const q = sim.players[i];
       if (q.team === p.team || !q.alive || q.dummy || (hidden && q.ps.perks.includes('ghost'))) continue;
-      const d = Math.hypot(q.ps.x - ps.x, q.ps.z - ps.z);
+      const d = hyp(q.ps.x - ps.x, q.ps.z - ps.z);
       if (d < bestD) { bestD = d; near = q; }
     }
     if (near) this._note(near.ps.x, near.ps.z, true, UAV_ERR);
@@ -1113,7 +1113,7 @@ export class BotBrain {
     for (let i = 0; i < sim.players.length; i++) {
       const q = sim.players[i];
       if (q.team === p.team || !q.alive || q.markT <= 0) continue;
-      const d = Math.hypot(q.ps.x - ps.x, q.ps.z - ps.z);
+      const d = hyp(q.ps.x - ps.x, q.ps.z - ps.z);
       if (d < bestD) { bestD = d; near = q; }
     }
     if (!near) return false;
@@ -1137,7 +1137,7 @@ export class BotBrain {
     for (let i = 0; i < sim.callouts.length; i++) {
       const c = sim.callouts[i];
       if (c.team !== p.team || c.by === p || c.seq <= this.calloutSeq || sim.time - c.t < S.calloutDelay) continue;
-      const d = Math.hypot(c.x - ps.x, c.z - ps.z);
+      const d = hyp(c.x - ps.x, c.z - ps.z);
       if (d < bestD) { bestD = d; best = c; }
     }
     if (!best) return;
@@ -1259,7 +1259,7 @@ export class BotBrain {
         // At the corner. Give them a moment to walk into it, then take the next bound toward where they were.
         this.holdT -= this.interval;
         if (this.holdT <= 0) {
-          const far = this.hasKnown && Math.hypot(this.knownX - ps.x, this.knownZ - ps.z) > bu.rush;
+          const far = this.hasKnown && hyp(this.knownX - ps.x, this.knownZ - ps.z) > bu.rush;
           if (!(far && this.closeN < 3 && this._closeIn(this.knownX, this.knownZ))) this._setMode('none');
         }
       }
@@ -1294,7 +1294,7 @@ export class BotBrain {
     if (visible) return;   // drive() fights; the strategic goal stays where it was.
 
     const o = this.objective;
-    const knownD = this.hasKnown ? Math.hypot(this.knownX - ps.x, this.knownZ - ps.z) : Infinity;
+    const knownD = this.hasKnown ? hyp(this.knownX - ps.x, this.knownZ - ps.z) : Infinity;
     // A bot on an objective will not be pulled off it by a noise: only a firm contact nearby, and never once it is standing on the point.
     const worthChasing = this.hasKnown && !o?.commit && (o
       ? !this.knownSoft && this.knownErr < 6 && knownD < OBJ_CHASE && !(this.mode === 'objective' && this.arrived)
@@ -1410,7 +1410,7 @@ export class BotBrain {
   // banked off a wall, or lobbed past low cover. Tries a few angles around the target, nearest first.
   _bestThrow(kind, aim, tx, tz, radius) {
     const { ps, S } = this;
-    const want = Math.hypot(tx - ps.x, tz - ps.z), reach = Math.min(want, maxThrowRange(ps.perks));
+    const want = hyp(tx - ps.x, tz - ps.z), reach = Math.min(want, maxThrowRange(ps.perks));
     const shots = S.arcTries ?? 0;
     if (!this._spend(1 + shots)) return null;
     let found = false, bestMiss = radius, bestAim = 0, bestX = 0, bestZ = 0;
@@ -1418,7 +1418,7 @@ export class BotBrain {
       const a = aim + (i === 0 ? 0 : (i % 2 ? 1 : -1) * Math.ceil(i / 2) * 0.32);
       const land = this._landing(kind, a, want);
       if (!land) continue;
-      const miss = Math.hypot(land.x - tx, land.z - tz);
+      const miss = hyp(land.x - tx, land.z - tz);
       if (miss < bestMiss) { found = true; bestMiss = miss; bestAim = a; bestX = land.x; bestZ = land.z; }
     }
     return found ? { x: bestX, z: bestZ, aim: bestAim, miss: bestMiss, dist: reach } : null;
@@ -1479,7 +1479,7 @@ export class BotBrain {
     const o = this.objective;
     if ((ps.tactical === 'snapshot' || ps.tactical === 'sensor') && ps.tacticalLeft > 0 && this.tacticalT <= 0 && !visible
       && o && this.mode === 'objective' && !this.arrived) {
-      const d = Math.hypot(o.x - ps.x, o.z - ps.z);
+      const d = hyp(o.x - ps.x, o.z - ps.z);
       if (d > 7 && d < maxThrowRange(ps.perks) + 3) {
         this.tacticalT = between(sim.rng, 8, 14);
         if (sim.rng() < S.flash + 0.2) { this._throw('tactical', Math.atan2(o.z - ps.z, o.x - ps.x), d - 2); return; }
@@ -1488,7 +1488,7 @@ export class BotBrain {
 
     // A vague contact is exactly when a Snapshot (or a Sensor) earns its keep.
     if ((ps.tactical === 'sensor' || ps.tactical === 'snapshot') && ps.tacticalLeft > 0 && this.tacticalT <= 0 && !visible && this.hasKnown) {
-      const dist = Math.hypot(this.knownX - ps.x, this.knownZ - ps.z);
+      const dist = hyp(this.knownX - ps.x, this.knownZ - ps.z);
       if (dist < SENSOR_RANGE && dist > 4) {
         if (sim.rng() < S.flash) this._throw('tactical', Math.atan2(this.knownZ - ps.z, this.knownX - ps.x), dist);
         this.tacticalT = between(sim.rng, 8, 14);
@@ -1501,7 +1501,7 @@ export class BotBrain {
       const dev = this._seenDevice();
       if (dev) {
         this.tacticalT = between(sim.rng, 8, 14);
-        if (sim.rng() < S.flash) { this._throw('tactical', Math.atan2(dev.z - ps.z, dev.x - ps.x) + gaussian(sim.rng) * S.aimFloor, Math.hypot(dev.x - ps.x, dev.z - ps.z)); return; }
+        if (sim.rng() < S.flash) { this._throw('tactical', Math.atan2(dev.z - ps.z, dev.x - ps.x) + gaussian(sim.rng) * S.aimFloor, hyp(dev.x - ps.x, dev.z - ps.z)); return; }
       }
     }
 
@@ -1509,7 +1509,7 @@ export class BotBrain {
     const fresh = this.hasKnown && !this.knownSoft && this.knownErr <= NADE_MAX_ERR && sim.time - this.knownT < 3;
     if (!visible && !fresh) return;
     const tx = visible ? this.target.ps.x : this.knownX, tz = visible ? this.target.ps.z : this.knownZ;
-    const d = Math.hypot(tx - ps.x, tz - ps.z);
+    const d = hyp(tx - ps.x, tz - ps.z);
     const aim = Math.atan2(tz - ps.z, tx - ps.x) + gaussian(sim.rng) * S.aimFloor;
 
     // A Decoy does its job off to one side: the noise pulls attention away from where the bot is about to go.
@@ -1536,7 +1536,7 @@ export class BotBrain {
     // A Blackout goes where the enemy is, to strip their kit before the push.
     if (ps.tactical === 'blackout' && ps.tacticalLeft > 0 && this.tacticalT <= 0 && d > 6 && d < 15) {
       const land = this._bestThrow('blackout', aim, tx, tz, 5);
-      if (land && Math.hypot(land.x - ps.x, land.z - ps.z) > 7.5) {
+      if (land && hyp(land.x - ps.x, land.z - ps.z) > 7.5) {
         this.tacticalT = between(sim.rng, 9, 15);
         if (sim.rng() < S.flash) { this._throw('tactical', land.aim, land.dist); return; }
       }
@@ -1560,7 +1560,7 @@ export class BotBrain {
       // A Drill's landing is where it goes off, past the wall it bores through, so this also finds wall shots.
       const radius = effectRadius(ps.lethal);
       const land = this._bestThrow(ps.lethal, aim, tx, tz, radius * 0.7);
-      if (land && Math.hypot(land.x - ps.x, land.z - ps.z) > 4 && !this._teammateNear(land.x, land.z, radius + 1)) {
+      if (land && hyp(land.x - ps.x, land.z - ps.z) > 4 && !this._teammateNear(land.x, land.z, radius + 1)) {
         if (sim.rng() < S.nade) {
           this._throw('lethal', land.aim, land.dist);
           this.nadeT = between(sim.rng, S.nadeCd[0], S.nadeCd[1]);
@@ -1580,17 +1580,17 @@ export class BotBrain {
     const { sim, ps, S } = this;
     if (visible || !sim.brk?.on || (this.breachT ?? 0) > sim.time || this.nadeT > 0 || ps.lethalLeft <= 0 || !BREACH_LETHALS.has(ps.lethal)) return false;
     if (this.arrived || this.pathLen < 2 || this.mode === 'none') return false;
-    const gx = this.goalX, gz = this.goalZ, straight = Math.hypot(gx - ps.x, gz - ps.z);
+    const gx = this.goalX, gz = this.goalZ, straight = hyp(gx - ps.x, gz - ps.z);
     if (straight < 8) return false;
     let walk = 0, x = ps.x, z = ps.z;
     for (let i = this.pathI; i < this.pathLen; i++) {
       const nx = this.path[i * 2], nz = this.path[i * 2 + 1];
-      walk += Math.hypot(nx - x, nz - z); x = nx; z = nz;
+      walk += hyp(nx - x, nz - z); x = nx; z = nz;
     }
     if (walk < straight + 5) return false;          // Only worth a grenade when the way round is a real detour.
     const piece = sim.brk.blockerOn(ps.x, ps.z, gx, gz);
     if (!piece) return false;
-    const cx = piece.x + piece.w / 2, cz = piece.z + piece.d / 2, d = Math.hypot(cx - ps.x, cz - ps.z);
+    const cx = piece.x + piece.w / 2, cz = piece.z + piece.d / 2, d = hyp(cx - ps.x, cz - ps.z);
     const face = Math.max(0.3, d - Math.min(piece.w, piece.d) / 2 - 0.2);
     if (face > 13 || face < 4) return false;       // Out of throwing reach, or close enough to catch its own blast.
     this.breachT = sim.time + 10;
@@ -1607,7 +1607,7 @@ export class BotBrain {
     const opener = ps.tactical === 'stun' ? 6 : ps.tactical === 'shock' ? 3.5 : ps.tactical === 'gas' ? 4 : 0;
     if (opener && ps.tacticalLeft > 0 && this.tacticalT <= 0 && (visible || ps.tactical === 'gas') && d > 5 && d < 15) {
       const land = this._bestThrow(ps.tactical, aim, tx, tz, opener);
-      if (land && !this._teammateNear(land.x, land.z, opener + 1) && Math.hypot(land.x - ps.x, land.z - ps.z) > opener) {
+      if (land && !this._teammateNear(land.x, land.z, opener + 1) && hyp(land.x - ps.x, land.z - ps.z) > opener) {
         if (sim.rng() < S.flash) this._throw('tactical', land.aim, land.dist);
         this.tacticalT = between(sim.rng, 8, 15);
         return;
@@ -1629,11 +1629,11 @@ export class BotBrain {
     for (let i = 0; i < list.length; i++) {
       const c = list[i];
       if (c.kind !== 'charge' || c.owner !== p.id || !c.stuck || c.land < 0 || c.age - c.land < 0.4) continue;
-      if (this._teammateNear(c.x, c.z, 4.5) || Math.hypot(c.x - ps.x, c.z - ps.z) < 4) continue;
+      if (this._teammateNear(c.x, c.z, 4.5) || hyp(c.x - ps.x, c.z - ps.z) < 4) continue;
       for (let k = 0; k < sim.players.length; k++) {
         const q = sim.players[k];
         if (!q.alive || q.team === p.team || q.spawnProtect > 0) continue;
-        const d = Math.hypot(q.ps.x - c.x, q.ps.z - c.z);
+        const d = hyp(q.ps.x - c.x, q.ps.z - c.z);
         if (d < 2 || (d < CHARGE_REACH && hasLineOfSight(sim.map, ps.x, ps.z, q.ps.x, q.ps.z, sim.smokes))) return true;
       }
     }
@@ -1643,7 +1643,7 @@ export class BotBrain {
   // The team's recon (Sensor, Snapshot, Tagger) put an enemy on the map: a firm fix, if it is anywhere near.
   onMarked(q) {
     const { ps } = this;
-    if (!q || !q.alive || Math.hypot(q.ps.x - ps.x, q.ps.z - ps.z) > 32) return;
+    if (!q || !q.alive || hyp(q.ps.x - ps.x, q.ps.z - ps.z) > 32) return;
     if (this.targetVisible && this.target === q) return;
     this._note(q.ps.x, q.ps.z, false, 1.2);
   }
@@ -1659,7 +1659,7 @@ export class BotBrain {
       const q = list[i];
       if (q.dead || q.owner === p.id || q.team === p.team) continue;
       const spec = EQUIPMENT[q.kind];
-      const d = Math.hypot(q.x - ps.x, q.z - ps.z);
+      const d = hyp(q.x - ps.x, q.z - ps.z);
       let danger = 0;
       if (RUN_FROM.has(q.kind) && q.attached === null) {
         const r = (spec.blast ? spec.blast.radius : spec.burn ? spec.burn.radius + 0.6 : 3.2) + 0.6;
@@ -1672,7 +1672,7 @@ export class BotBrain {
         const b = tripBeam(sim.map, q.x, q.z, q.vx, q.vz);
         const dx = b.x1 - b.x0, dz = b.z1 - b.z0, l2 = dx * dx + dz * dz || 1;
         const u = Math.max(0, Math.min(1, ((ps.x - b.x0) * dx + (ps.z - b.z0) * dz) / l2));
-        if (Math.hypot(ps.x - b.x0 - dx * u, ps.z - b.z0 - dz * u) < 1.6) danger = 0.5;
+        if (hyp(ps.x - b.x0 - dx * u, ps.z - b.z0 - dz * u) < 1.6) danger = 0.5;
       }
       if (danger <= worst) continue;
       // Only what the bot could know about: in view, or right next to it.
@@ -1704,7 +1704,7 @@ export class BotBrain {
     for (let i = 0; i < list.length; i++) {
       const q = list[i];
       if (q.dead || !SHOOTABLE.has(q.kind) || q.attached !== null || !(q.stuck || q.grounded) || q.owner === p.id || q.team === p.team) continue;
-      const d = Math.hypot(q.x - ps.x, q.z - ps.z);
+      const d = hyp(q.x - ps.x, q.z - ps.z);
       if (d >= bestD || d < 1.5 || !hasLineOfSight(sim.map, ps.x, ps.z, q.x, q.z, sim.smokes)) continue;
       best = q; bestD = d;
     }
@@ -1729,7 +1729,7 @@ export class BotBrain {
     for (let i = 0; i < list.length; i++) {
       const q = list[i];
       if (!q.stuck || !SHOCK_TARGETS.has(q.kind) || q.team === p.team) continue;
-      const d = Math.hypot(q.x - ps.x, q.z - ps.z);
+      const d = hyp(q.x - ps.x, q.z - ps.z);
       if (d < 3 || d >= bestD || !hasLineOfSight(sim.map, ps.x, ps.z, q.x, q.z, sim.smokes)) continue;
       best = q; bestD = d;
     }
@@ -1748,7 +1748,7 @@ export class BotBrain {
     for (let i = 0; i < sim.turrets.length; i++) {
       const t = sim.turrets[i];
       if (t.team === p.team) continue;
-      const d = Math.hypot(t.x - ps.x, t.z - ps.z);
+      const d = hyp(t.x - ps.x, t.z - ps.z);
       if (d < bestD && hasLineOfSight(sim.map, ps.x, ps.z, t.x, t.z, sim.smokes)) { bestD = d; nearest = t; }
     }
     if (!nearest) { this.turretTarget = null; return; }
@@ -1777,7 +1777,7 @@ export class BotBrain {
       const a = k / 8 * TAU, x = c.x + Math.cos(a) * PEEK_STEP, z = c.z + Math.sin(a) * PEEK_STEP;
       if (!sim.nav.isWalkable(x, z) || !sim.nav.segmentClear(c.x, c.z, x, z)) continue;
       if (!hasLineOfSight(sim.map, x, z, tx, tz)) continue;
-      const score = Math.hypot(x - ps.x, z - ps.z) + Math.hypot(x - tx, z - tz) * 0.15;
+      const score = hyp(x - ps.x, z - ps.z) + hyp(x - tx, z - tz) * 0.15;
       if (score < best) { best = score; spot = { x, z }; }
     }
     if (!spot) return false;
@@ -1817,7 +1817,7 @@ export class BotBrain {
     for (let i = 0; i < sim.players.length; i++) {
       const q = sim.players[i];
       if (q === p || q.team !== p.team || !q.alive || !q.bot || q.bot.mode !== 'hunt') continue;
-      if (Math.hypot(q.bot.goalX - x, q.bot.goalZ - z) < CROWD && ++n >= CROWD_MAX) return true;
+      if (hyp(q.bot.goalX - x, q.bot.goalZ - z) < CROWD && ++n >= CROWD_MAX) return true;
     }
     return false;
   }
@@ -1825,7 +1825,7 @@ export class BotBrain {
   // Comes at (x, z) from one side: a point SIDE_STEP metres across the line from here, whichever side is open.
   _sideStep(x, z) {
     const { sim, ps } = this;
-    const dx = x - ps.x, dz = z - ps.z, d = Math.max(0.5, Math.hypot(dx, dz));
+    const dx = x - ps.x, dz = z - ps.z, d = Math.max(0.5, hyp(dx, dz));
     const side = sim.rng() < 0.5 ? 1 : -1;
     for (const k of [side, -side]) {
       const ax = x - dz / d * SIDE_STEP * k - dx / d * 2, az = z + dx / d * SIDE_STEP * k - dz / d * 2;
@@ -1841,13 +1841,13 @@ export class BotBrain {
     const { sim, ps } = this;
     if (sim.ffa) {
       const hot = sim.hot;
-      return hot && sim.time - hot.t < 10 && Math.hypot(hot.x - ps.x, hot.z - ps.z) < 40 ? Math.atan2(hot.z - ps.z, hot.x - ps.x) : null;
+      return hot && sim.time - hot.t < 10 && hyp(hot.x - ps.x, hot.z - ps.z) < 40 ? Math.atan2(hot.z - ps.z, hot.x - ps.x) : null;
     }
     const side = this.side, ix = sim.nav.holdIndex, n = ix.near(ps.x, ps.z, LOOK_REACH);
     let best = null, bestS = 12;
     for (let q = 0; q < n; q++) {
       const h = sim.nav.holds[ix.out[q]];
-      if (h.sight[side] > bestS && Math.hypot(h.x - ps.x, h.z - ps.z) < LOOK_REACH) { bestS = h.sight[side]; best = h; }
+      if (h.sight[side] > bestS && hyp(h.x - ps.x, h.z - ps.z) < LOOK_REACH) { bestS = h.sight[side]; best = h; }
     }
     if (best) return best.aim[side];
     const lane = sim.map.lanes?.[this.laneIdx];
@@ -1876,9 +1876,9 @@ export class BotBrain {
   _maybeSmoke(tx, tz) {
     const { sim, p, ps, S } = this;
     if (ps.tactical !== 'smoke' || ps.tacticalLeft <= 0 || this.tacticalT > 0 || !this.targetVisible || p.hp >= 60) return;
-    if (Math.hypot(tx - ps.x, tz - ps.z) < 5) return;
+    if (hyp(tx - ps.x, tz - ps.z) < 5) return;
     this.tacticalT = between(sim.rng, 8, 14);
-    if (sim.rng() < S.smoke) this._throw('tactical', Math.atan2(tz - ps.z, tx - ps.x), Math.hypot(tx - ps.x, tz - ps.z) * 0.6);
+    if (sim.rng() < S.smoke) this._throw('tactical', Math.atan2(tz - ps.z, tx - ps.x), hyp(tx - ps.x, tz - ps.z) * 0.6);
   }
 
   _ambush() {
@@ -1899,15 +1899,15 @@ export class BotBrain {
   // False when there is none, or the bot has bounded enough for one contact.
   _closeIn(tx, tz) {
     const { sim, ps } = this;
-    const here = Math.hypot(tx - ps.x, tz - ps.z);
+    const here = hyp(tx - ps.x, tz - ps.z);
     if (!this._spend(1)) return false;
     let best = null, bestScore = Infinity;
     const ix = sim.nav.coverIndex, n = ix.near(ps.x, ps.z, CLOSE_REACH);
     for (let q = 0; q < n; q++) {
       const c = sim.nav.cover[ix.out[q]];
-      const d = Math.hypot(c.x - ps.x, c.z - ps.z);
+      const d = hyp(c.x - ps.x, c.z - ps.z);
       if (d > CLOSE_REACH || d < 1.5) continue;
-      const left = Math.hypot(tx - c.x, tz - c.z);
+      const left = hyp(tx - c.x, tz - c.z);
       if (left > here - CLOSE_GAIN || left < 2) continue;
       if (hasLineOfSight(sim.map, c.x, c.z, tx, tz)) continue;
       const score = d + left * 0.7 + sim.rng() * 2;
@@ -1963,8 +1963,8 @@ export class BotBrain {
     const o = this.objective, ps = this.ps;
     if (!o) return false;
     if (o.role === 'collect') return true;      // Done when the tag goes; the next plan clears it.
-    if (o.role === 'support') return Math.hypot(this.goalX - ps.x, this.goalZ - ps.z) < 2;
-    return Math.hypot(o.x - ps.x, o.z - ps.z) <= o.r * 0.95;
+    if (o.role === 'support') return hyp(this.goalX - ps.x, this.goalZ - ps.z) < 2;
+    return hyp(o.x - ps.x, o.z - ps.z) <= o.r * 0.95;
   }
 
   _goObjective() {
@@ -1994,10 +1994,10 @@ export class BotBrain {
     const ix = sim.nav.holdIndex, n = ix.near(o.x, o.z, o.r + OVERWATCH_MAX);
     for (let q = 0; q < n; q++) {
       const h = sim.nav.holds[ix.out[q]];
-      const toZone = Math.hypot(h.x - o.x, h.z - o.z);
+      const toZone = hyp(h.x - o.x, h.z - o.z);
       if (toZone < o.r + 1 || toZone > o.r + OVERWATCH_MAX) continue;
       if (this._teammateNear(h.x, h.z, 3) || !hasLineOfSight(sim.map, h.x, h.z, o.x, o.z)) continue;
-      const score = Math.hypot(h.x - ps.x, h.z - ps.z) * 0.5 + toZone * 0.3 + sim.rng() * 4;
+      const score = hyp(h.x - ps.x, h.z - ps.z) * 0.5 + toZone * 0.3 + sim.rng() * 4;
       if (score < bestScore) { bestScore = score; best = h; }
     }
     if (!best) return false;
@@ -2039,7 +2039,7 @@ export class BotBrain {
     if (r < S.holdProb * style.hold * 0.8 && this._goHold()) return;
     if (this.deferred) return;
     const hot = sim.hot;
-    if (hot && sim.time - hot.t < 8 && r < 0.55 && Math.hypot(hot.x - ps.x, hot.z - ps.z) < 45) {
+    if (hot && sim.time - hot.t < 8 && r < 0.55 && hyp(hot.x - ps.x, hot.z - ps.z) < 45) {
       this.mode = 'advance';
       this._goTo(hot.x + (sim.rng() - 0.5) * 10, hot.z + (sim.rng() - 0.5) * 10);
       return;
@@ -2049,7 +2049,7 @@ export class BotBrain {
     for (let i = 0; i < 10; i++) {
       x = W * (0.08 + 0.84 * sim.rng());
       z = H * (0.08 + 0.84 * sim.rng());
-      const d = Math.hypot(x - ps.x, z - ps.z);
+      const d = hyp(x - ps.x, z - ps.z);
       if (d > 14 && d < 50 && sim.nav.isWalkable(x, z)) break;
     }
     this.mode = 'advance';
@@ -2072,7 +2072,7 @@ export class BotBrain {
     const ix = sim.nav.coverIndex, n = ix.near(ps.x, ps.z, 12);
     for (let q = 0; q < n; q++) {
       const c = sim.nav.cover[ix.out[q]];
-      const d = Math.hypot(c.x - ps.x, c.z - ps.z);
+      const d = hyp(c.x - ps.x, c.z - ps.z);
       if (d > 12 || d < 2) continue;
       if (!sim.ffa && Math.abs(c.z - laneZ) > 11) continue;
       const depth = sim.ffa ? 0 : (this.side === 0 ? c.x : W - c.x) / W;
@@ -2103,7 +2103,7 @@ export class BotBrain {
     const ix = sim.nav.holdIndex, n = ix.near(ps.x, ps.z, 11);
     for (let q = 0; q < n; q++) {
       const h = sim.nav.holds[ix.out[q]];
-      const d = Math.hypot(h.x - ps.x, h.z - ps.z), side = this._holdSide(h);
+      const d = hyp(h.x - ps.x, h.z - ps.z), side = this._holdSide(h);
       if (d > 11 || h.sight[side] < 12) continue;
       if (!sim.ffa && Math.abs(h.z - laneZ) > 9) continue;    // Holding is part of playing this lane, not leaving it.
       if (this._teammateNear(h.x, h.z, 3)) continue;
@@ -2126,7 +2126,7 @@ export class BotBrain {
     for (let i = 0; i < sim.players.length; i++) {
       const q = sim.players[i];
       if (q === p || q.team !== p.team || !q.alive) continue;
-      if (Math.hypot(q.ps.x - x, q.ps.z - z) < r) return true;
+      if (hyp(q.ps.x - x, q.ps.z - z) < r) return true;
     }
     return false;
   }
@@ -2160,7 +2160,7 @@ export class BotBrain {
     const { ps, path, input: I, S, sim } = this;
     if (this.arrived || this.pathLen === 0) return false;
     let wx = path[this.pathI * 2], wz = path[this.pathI * 2 + 1];
-    let dx = wx - ps.x, dz = wz - ps.z, d = Math.hypot(dx, dz);
+    let dx = wx - ps.x, dz = wz - ps.z, d = hyp(dx, dz);
     if (d < 0.75) {
       this.pathI++;
       if (this.pathI >= this.pathLen) {
@@ -2169,7 +2169,7 @@ export class BotBrain {
         this.arrived = true; return false;
       }
       wx = path[this.pathI * 2]; wz = path[this.pathI * 2 + 1];
-      dx = wx - ps.x; dz = wz - ps.z; d = Math.hypot(dx, dz);
+      dx = wx - ps.x; dz = wz - ps.z; d = hyp(dx, dz);
     }
     if (d < 1e-4) return true;
     I.mx = dx / d; I.mz = dz / d;
@@ -2213,7 +2213,7 @@ export class BotBrain {
     // A Shieldbearer's shield facing this bot: walk round it, one way, and keep going until the flank is open.
     if (this.kite && sim.rules?.kinds?.facing(q, ps)) { this.strafeDir = this.flankDir ||= (p => (p.index & 1 ? 1 : -1))(this.p); if (fwd > 0) fwd = 0.3; }
     let mx = ux * fwd - uz * this.strafeDir, mz = uz * fwd + ux * this.strafeDir;
-    const len = Math.hypot(mx, mz);
+    const len = hyp(mx, mz);
     if (len > 1) { mx /= len; mz /= len; }
     if (len > 0.01 && !sim.nav.isWalkable(ps.x + mx * 1.3, ps.z + mz * 1.3)) {
       this.strafeDir = -this.strafeDir;
@@ -2227,14 +2227,14 @@ export class BotBrain {
       }
     }
     // Graveyard Shift: over a downed mate (js/sim/zombies.js sets `zStill`), stand still and shoot.
-    if (this.zStill && Math.hypot(this.zStill.x - ps.x, this.zStill.z - ps.z) < 1.8) { I.mx = 0; I.mz = 0; return; }
+    if (this.zStill && hyp(this.zStill.x - ps.x, this.zStill.z - ps.z) < 1.8) { I.mx = 0; I.mz = 0; return; }
     // Strafe all it likes, but do not dance off the point it is holding (a kiting bot backs off it, and walks back).
-    if (holdingPoint && !(this.kite && fwd < 0) && Math.hypot(ps.x + mx * 1.3 - o.x, ps.z + mz * 1.3 - o.z) > o.r * 0.9) {
+    if (holdingPoint && !(this.kite && fwd < 0) && hyp(ps.x + mx * 1.3 - o.x, ps.z + mz * 1.3 - o.z) > o.r * 0.9) {
       this.strafeDir = -this.strafeDir;
       mx = 0; mz = 0;
     }
     // Peeking: a short jiggle either side of the spot beside cover, never a walk into the open.
-    if (peeking && !this.overpeek && Math.hypot(ps.x + mx * 0.6 - this.peekSpot.x, ps.z + mz * 0.6 - this.peekSpot.z) > PEEK_JIGGLE) {
+    if (peeking && !this.overpeek && hyp(ps.x + mx * 0.6 - this.peekSpot.x, ps.z + mz * 0.6 - this.peekSpot.z) > PEEK_JIGGLE) {
       this.strafeDir = -this.strafeDir;
       mx = (this.peekSpot.x - ps.x) * 0.8; mz = (this.peekSpot.z - ps.z) * 0.8;
     }
@@ -2297,7 +2297,7 @@ export class BotBrain {
     const tu = this.turretTarget;
     if (!fighting && tu && tu.hp > 0) {
       const dx = tu.x - ps.x, dz = tu.z - ps.z;
-      const d = Math.max(0.3, Math.hypot(dx, dz));
+      const d = Math.max(0.3, hyp(dx, dz));
       const ang = Math.atan2(dz, dx);
       if (this.reactLeft > 0) this.reactLeft -= dt;
       desired = ang + S.aimFloor * Math.sin(this.wobble += dt * 3.1);
@@ -2307,7 +2307,7 @@ export class BotBrain {
     } else if (fighting) {
       sim.posAt(q, S.lag, POS);          // The bot aims at where it perceives the target, slightly old.
       const dx = POS.x - ps.x, dz = POS.z - ps.z;
-      const d = Math.max(0.3, Math.hypot(dx, dz));
+      const d = Math.max(0.3, hyp(dx, dz));
       const trueAng = Math.atan2(dz, dx);
 
       if (this.reactLeft > 0) this.reactLeft -= dt;
@@ -2351,11 +2351,11 @@ export class BotBrain {
       if (this.moving) I.sprint = I.sprint && !(this.mode === 'hunt' && S.sprint < 1);
       if (this.suppressing) {
         desired = Math.atan2(this.sawZ - ps.z, this.sawX - ps.x);
-        this._trigger(null, Math.max(0.3, Math.hypot(this.sawX - ps.x, this.sawZ - ps.z)), desired, dt, this.sawX, this.sawZ);
+        this._trigger(null, Math.max(0.3, hyp(this.sawX - ps.x, this.sawZ - ps.z)), desired, dt, this.sawX, this.sawZ);
         I.aiming = true; I.sprint = false;
       } else if (this.hasKnown) {
         // Checks the area the contact came from, sweeping across it. Never settles on a point it cannot have known.
-        const dist = Math.max(1, Math.hypot(this.knownX - ps.x, this.knownZ - ps.z));
+        const dist = Math.max(1, hyp(this.knownX - ps.x, this.knownZ - ps.z));
         const spread = Math.min(0.9, Math.atan2(Math.max(0.5, this._knownBlur), dist));
         this.peek += dt * 1.8;
         desired = Math.atan2(this.knownZ - ps.z, this.knownX - ps.x) + (Math.sin(this.peek) * 0.65 + this.knownBias) * spread;
@@ -2392,7 +2392,7 @@ export class BotBrain {
     // Soft separation, only while walking the map.
     if (!fighting && this.moving && (this.sepX || this.sepZ)) {
       I.mx += this.sepX * 0.5; I.mz += this.sepZ * 0.5;
-      const len = Math.hypot(I.mx, I.mz);
+      const len = hyp(I.mx, I.mz);
       if (len > 1) { I.mx /= len; I.mz /= len; }
     }
 
@@ -2425,7 +2425,7 @@ export class BotBrain {
     const { ps, sim } = this;
     this.stuckT += dt;
     if (this.stuckT < 0.8) return;
-    const moved = Math.hypot(ps.x - this.stuckX, ps.z - this.stuckZ);
+    const moved = hyp(ps.x - this.stuckX, ps.z - this.stuckZ);
     const wanted = this.pathLen > 0 && !this.arrived && !this.targetVisible && this.mode !== 'none';
     this.stuckT = 0; this.stuckX = ps.x; this.stuckZ = ps.z;
     if (!wanted || moved > 0.5) { this.stuckN = 0; return; }
@@ -2463,7 +2463,7 @@ export class BotBrain {
     if (kind === 'standing') { I.mx = 0; I.mz = 0; I.sprint = false; return; }
     const h = sim.players.find(q => !q.isBot && !q.dummy && q.alive);
     if (!h) { I.mx = 0; I.mz = 0; I.sprint = false; return; }
-    const dx = h.ps.x - ps.x, dz = h.ps.z - ps.z, d = Math.hypot(dx, dz) || 1;
+    const dx = h.ps.x - ps.x, dz = h.ps.z - ps.z, d = hyp(dx, dz) || 1;
     if (kind === 'strafing') {
       this.strafeT = (this.strafeT ?? 0) + dt;
       if (this.strafeT > STRAFE_LEG) { this.strafeT = 0; this.strafeDir = -(this.strafeDir || 1); }
@@ -2472,7 +2472,7 @@ export class BotBrain {
       return;
     }
     if (this.targetVisible && this.target === h) { I.mx = dx / d; I.mz = dz / d; I.sprint = d > 9; return; }
-    if (Math.hypot(this.goalX - h.ps.x, this.goalZ - h.ps.z) > 5) this._goTo(h.ps.x, h.ps.z);
+    if (hyp(this.goalX - h.ps.x, this.goalZ - h.ps.z) > 5) this._goTo(h.ps.x, h.ps.z);
     I.sprint = true;
   }
 
@@ -2494,7 +2494,7 @@ export class BotBrain {
     if (drill && drill !== 'normal') this._drill(drill, dt);
     // A bot that wants ADS eases its move stick into the ADS stance (see adsRoomFor) instead of strafing at full stick
     // from the hip. The stick is put back afterwards so the scaling can never compound across ticks.
-    const mx = I.mx, mz = I.mz, len = Math.hypot(mx, mz);
+    const mx = I.mx, mz = I.mz, len = hyp(mx, mz);
     if (I.aiming && !I.sprint && len > ADS_STICK_FULL) { I.mx = mx * ADS_STICK_FULL / len; I.mz = mz * ADS_STICK_FULL / len; }
     // Extraction's AI patrols walk their rounds (js/sim/extract.js sets `calm`) until something happens.
     if (this.calm && !this.targetVisible && !this.hasKnown) { I.sprint = false; I.mx *= 0.48; I.mz *= 0.48; }

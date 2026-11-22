@@ -16,7 +16,7 @@
 // broken shield (the packed kind 9).
 import { ZK, ZM_SPIT, ZM_BLAST, ZM_SHIELD, ZM_FOG, clawDmg, specialMix, isBossKind, NO_GUN } from '../shared/zombies.js';
 import { WEAPONS } from '../shared/weapons.js';
-import { hasLineOfSight } from '../shared/geometry.js';
+import { hasLineOfSight, hyp } from '../shared/geometry.js';
 import { HUMAN_VIEW } from './bots.js';
 
 const r2 = v => Math.round(v * 100) / 100;
@@ -77,7 +77,7 @@ export class ZmKinds {
       const dmg = ZM_SPIT.hit * this._scale();
       for (const q of R.crew) {
         if (!q.alive || q.downed || q.away) continue;
-        if (Math.hypot(q.ps.x - g.x, q.ps.z - g.z) < ZM_SPIT.hitR) sim._damage(q, g.by, dmg, NO_GUN, 0);
+        if (hyp(q.ps.x - g.x, q.ps.z - g.z) < ZM_SPIT.hitR) sim._damage(q, g.by, dmg, NO_GUN, 0);
       }
       this.puddles.push({ x: g.x, z: g.z, until: now + ZM_SPIT.life, by: g.by });
       if (this.puddles.length > ZM_SPIT.max) this.puddles.shift();
@@ -91,7 +91,7 @@ export class ZmKinds {
         const dmg = ZM_SPIT.dps * 0.25 * this._scale();
         for (const pd of this.puddles) for (const q of R.crew) {
           if (!q.alive || q.downed || q.away) continue;
-          if (Math.hypot(q.ps.x - pd.x, q.ps.z - pd.z) < ZM_SPIT.r) sim._damage(q, pd.by, dmg, NO_GUN, 0);
+          if (hyp(q.ps.x - pd.x, q.ps.z - pd.z) < ZM_SPIT.r) sim._damage(q, pd.by, dmg, NO_GUN, 0);
         }
       }
     }
@@ -134,7 +134,7 @@ export class ZmKinds {
     const side = (p.index & 1 ? 1 : -1) * 0.6;
     let mx = ux * fwd - uz * side, mz = uz * fwd + ux * side;
     if (!sim.nav.isWalkable(ps.x + mx * 1.2, ps.z + mz * 1.2)) { mx = ux * Math.max(0, fwd) + uz * side; mz = uz * Math.max(0, fwd) - ux * side; }
-    const l = Math.hypot(mx, mz);
+    const l = hyp(mx, mz);
     if (l > 1e-3) { I.mx = mx / l * pace; I.mz = mz / l * pace; } else { I.mx = 0; I.mz = 0; }
     I.aim = Math.atan2(uz, ux);
     return true;
@@ -145,7 +145,7 @@ export class ZmKinds {
     let x = tgt.ps.x + tgt.ps.vx * ZM_SPIT.lead, z = tgt.ps.z + tgt.ps.vz * ZM_SPIT.lead;
     // Never through a wall: short of it if the lead would put the glob behind one.
     if (!hasLineOfSight(sim.map, ps.x, ps.z, x, z)) { x = tgt.ps.x; z = tgt.ps.z; }
-    const dist = Math.hypot(x - ps.x, z - ps.z), dur = ZM_SPIT.flight + ZM_SPIT.perM * dist;
+    const dist = hyp(x - ps.x, z - ps.z), dur = ZM_SPIT.flight + ZM_SPIT.perM * dist;
     this.globs.push({ by: p, x, z, at: sim.time + dur });
     sim._emit({ t: 'zspit', id: p.id, ox: r2(ps.x), oz: r2(ps.z), x: r2(x), z: r2(z), dur: r2(dur) });
   }
@@ -192,7 +192,7 @@ export class ZmKinds {
     const sc = this._scale();
     for (const q of R.crew) {
       if (!q.alive || q.downed || q.away) continue;
-      const d = Math.hypot(q.ps.x - b.x, q.ps.z - b.z);
+      const d = hyp(q.ps.x - b.x, q.ps.z - b.z);
       if (d >= B.r || !hasLineOfSight(sim.map, b.x, b.z, q.ps.x, q.ps.z)) continue;
       sim._damage(q, b.by, (B.dmg - (B.dmg - B.min) * d / B.r) * sc, NO_GUN, d);
     }
@@ -200,7 +200,7 @@ export class ZmKinds {
     const hurt = R.hp * B.horde;
     for (const q of R.horde) {
       if (!q.alive || q === b.by) continue;
-      const d = Math.hypot(q.ps.x - b.x, q.ps.z - b.z);
+      const d = hyp(q.ps.x - b.x, q.ps.z - b.z);
       if (d >= B.r || !hasLineOfSight(sim.map, b.x, b.z, q.ps.x, q.ps.z)) continue;
       sim._damage(q, b.killer, isBossKind(q.zk) ? Math.min(hurt, q.zMax * 0.04) : hurt * (1 - 0.5 * d / B.r), 'launcher', d, 'zblast');
     }
@@ -229,7 +229,7 @@ export class ZmKinds {
   dodge(ps) {
     let best = null, bd = Infinity;
     const now = this.R.sim.time;
-    const check = (x, z, r) => { const d = Math.hypot(ps.x - x, ps.z - z); if (d < r + 0.7 && d < bd) { bd = d; best = { x, z, d }; } };
+    const check = (x, z, r) => { const d = hyp(ps.x - x, ps.z - z); if (d < r + 0.7 && d < bd) { bd = d; best = { x, z, d }; } };
     for (const g of this.globs) if (g.at - now < 1.2) check(g.x, g.z, ZM_SPIT.hitR + 0.6);
     for (const pd of this.puddles) check(pd.x, pd.z, ZM_SPIT.r);
     // A running trap hurts the crew too: off its floor (the bots' route goes round it, docs/ZOMBIES.md).
@@ -239,7 +239,7 @@ export class ZmKinds {
     const lane = E?.laneDodge?.(ps);
     if (lane) return lane;
     if (!best) return null;
-    const dx = ps.x - best.x, dz = ps.z - best.z, l = Math.hypot(dx, dz);
+    const dx = ps.x - best.x, dz = ps.z - best.z, l = hyp(dx, dz);
     return l > 0.05 ? { x: dx / l, z: dz / l } : { x: 1, z: 0 };
   }
 }

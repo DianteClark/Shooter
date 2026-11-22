@@ -6,7 +6,7 @@
 // Honesty: a bot only reacts to what a player could know. Aircraft overhead are in plain view; strikes are announced
 // (red markers, the whistle, the 'incoming' callout) before they land; machines need line of sight like sentries do.
 
-import { hasLineOfSight } from '../shared/geometry.js';
+import { hasLineOfSight, hyp } from '../shared/geometry.js';
 import { WEAPONS } from '../shared/weapons.js';
 import { airHp, DOME_R } from './streaks-v9.js';
 
@@ -22,7 +22,7 @@ export function streakMoment(b, kind, visible) {
   const { sim, p, ps } = b;
   const seen = () => sim._teamVisible(p.team).length;
   const busy = visible || b.hasKnown;
-  const mates = r => sim.players.reduce((n, q) => n + (q !== p && q.team === p.team && q.alive && Math.hypot(q.ps.x - ps.x, q.ps.z - ps.z) <= r ? 1 : 0), 0);
+  const mates = r => sim.players.reduce((n, q) => n + (q !== p && q.team === p.team && q.alive && hyp(q.ps.x - ps.x, q.ps.z - ps.z) <= r ? 1 : 0), 0);
   switch (kind) {
     // Intel: between fights, when it will tell the team something new.
     case 'sweep':
@@ -46,7 +46,7 @@ export function streakMoment(b, kind, visible) {
 }
 
 function incomingNear(sim, p, r) {
-  for (const s of sim.strikes) if (s.team !== p.team && Math.hypot(s.x - p.ps.x, s.z - p.ps.z) < r) return true;
+  for (const s of sim.strikes) if (s.team !== p.team && hyp(s.x - p.ps.x, s.z - p.ps.z) < r) return true;
   return false;
 }
 
@@ -62,7 +62,7 @@ export function thinkAir(b, visible) {
   for (let i = 0; i < sim.gunships.length; i++) {
     const g = sim.gunships[i];
     if (g.team === p.team || !SHOOTABLE_AIR.has(g.kind)) continue;
-    const d = Math.hypot(g.x - ps.x, g.z - ps.z);
+    const d = hyp(g.x - ps.x, g.z - ps.z);
     if (d >= bestD) continue;
     if (!HIGH.has(g.kind) && !hasLineOfSight(sim.map, ps.x, ps.z, g.x, g.z, sim.smokes)) continue;
     best = g; bestD = d; air = true;
@@ -71,7 +71,7 @@ export function thinkAir(b, visible) {
   for (let i = 0; i < sim.turrets.length; i++) {
     const t = sim.turrets[i];
     if (t.team === p.team || !t.kind || t.kind === 'sentry') continue;
-    const d = Math.hypot(t.x - ps.x, t.z - ps.z);
+    const d = hyp(t.x - ps.x, t.z - ps.z);
     if (d >= Math.min(bestD, 20) || !hasLineOfSight(sim.map, ps.x, ps.z, t.x, t.z, sim.smokes)) continue;
     best = t; bestD = d; air = false;
   }
@@ -103,7 +103,7 @@ export function thinkStrikes(b, visible) {
   for (let i = 0; i < sim.strikes.length; i++) {
     const s = sim.strikes[i];
     if (s.team === p.team) continue;
-    const left = s.at - sim.time, d = Math.hypot(s.x - ps.x, s.z - ps.z);
+    const left = s.at - sim.time, d = hyp(s.x - ps.x, s.z - ps.z);
     if (left > STRIKE_WARN || d > s.radius + 1) continue;
     const danger = (s.radius + 1 - d) / (s.radius + 1);
     if (danger > worst) { worst = danger; threat = s; }
@@ -127,7 +127,7 @@ function thinkCrate(b) {
   for (let i = 0; i < sim.turrets.length; i++) {
     const t = sim.turrets[i];
     if (t.kind !== 'crate' || (t.team !== p.team && S.turret !== 'shoot')) continue;
-    const d = Math.hypot(t.x - ps.x, t.z - ps.z);
+    const d = hyp(t.x - ps.x, t.z - ps.z);
     if (d >= bestD || !hasLineOfSight(sim.map, ps.x, ps.z, t.x, t.z, sim.smokes)) continue;
     best = t; bestD = d;
   }

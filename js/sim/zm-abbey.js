@@ -10,7 +10,7 @@
 // the wisp flies from the kill to the font), {t:'zdive', x, z, tx, tz, r, sink, warn} (the Ferryman going under, the
 // spot it comes up at), {t:'zfx', k: 'surface', x, z, r} (it comes up).
 import { ZM, ZE, ZK, ZM_FERRY, NO_GUN, clawDmg, isBossKind } from '../shared/zombies.js';
-import { hasLineOfSight } from '../shared/geometry.js';
+import { hasLineOfSight, hyp } from '../shared/geometry.js';
 
 const r2 = v => Math.round(v * 100) / 100;
 
@@ -42,7 +42,7 @@ export function feedFonts(E, target) {
   let best = null, bd = ZE.quest.fontR;
   for (const r of L.relics) {
     if (!(q.woke & (1 << r.i)) || q.got & (1 << r.i)) continue;
-    const d = Math.hypot(target.ps.x - r.x, target.ps.z - r.z);
+    const d = hyp(target.ps.x - r.x, target.ps.z - r.z);
     if (d < bd) { bd = d; best = r; }
   }
   if (!best) return;
@@ -99,7 +99,7 @@ export function stepFerryman(E, w, dt) {
     w.zHoldT = sim.time + P.hold;
     sim._emit({ t: 'zfx', k: 'surface', x: r2(d.tx), z: r2(d.tz), r: P.r });
     for (const p of R.crew) {
-      if (!p.alive || p.downed || p.away || Math.hypot(p.ps.x - d.tx, p.ps.z - d.tz) > P.r) continue;
+      if (!p.alive || p.downed || p.away || hyp(p.ps.x - d.tx, p.ps.z - d.tz) > P.r) continue;
       sim._damage(p, w, P.dmg * clawDmg(ZK.ferryman, R.round) / ZM.kinds.ferryman.dmg, NO_GUN, 0);
     }
     return;
@@ -112,7 +112,7 @@ export function stepFerryman(E, w, dt) {
   let tgt = null, td = Infinity;
   for (const p of R.crew) {
     if (!p.alive || p.downed || p.away) continue;
-    const dd = Math.hypot(p.ps.x - w.ps.x, p.ps.z - w.ps.z);
+    const dd = hyp(p.ps.x - w.ps.x, p.ps.z - w.ps.z);
     const sc = dd > 3 ? dd : dd + P.range;
     if (dd < P.range && sc < td && sim.nav?.isWalkable(p.ps.x, p.ps.z)) { td = sc; tgt = p; }
   }
@@ -128,7 +128,7 @@ export function stepFerryman(E, w, dt) {
 export function diveDodge(E, ps) {
   const d = E.quest.dive;
   if (!d) return null;
-  const dx = ps.x - d.tx, dz = ps.z - d.tz, l = Math.hypot(dx, dz);
+  const dx = ps.x - d.tx, dz = ps.z - d.tz, l = hyp(dx, dz);
   if (l > ZM_FERRY.r + 0.8) return null;
   return l > 0.05 ? { x: dx / l, z: dz / l } : { x: 1, z: 0 };
 }
