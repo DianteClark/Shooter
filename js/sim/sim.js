@@ -37,18 +37,21 @@ const MAX_CATCHUP_STEPS = 6;     // After a stall, drop time rather than spiral.
 const WARMUP = 3;
 // Sim._warmUp: the throwaway match runs at most WARM_TICKS ticks: WARM_LOAD_MS of wall time at load, WARM_TICK_MS a tick
 // through the countdown, and WARM_LATE_MS more at load for a new host mid-match.
-const WARM_TICKS = 900, WARM_LOAD_MS = 150, WARM_TICK_MS = 2.5, WARM_LATE_MS = 250;
+const WARM_TICKS = 600, WARM_LOAD_MS = 200, WARM_TICK_MS = 1.5, WARM_LATE_MS = 250;
 const warmClock = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 // A copy of a map for a throwaway sim: its own walls (destruction breaks them, Bulwarks and Graveyard Shift's fences
 // are pushed onto the list) and breakables pointing at those walls; everything else (layout, regions, caches that
 // never change) shared.
+// Copies by spread, which keeps each object's hidden class: code the engine optimises on the copy (raycasts, collision)
+// then stays optimised for the real map. Fields the map does not have yet are left for the copy to add the same way.
 function cloneMap(map) {
-  const out = Object.create(Object.getPrototypeOf(map), Object.getOwnPropertyDescriptors(map));
+  const out = { ...map };
   const copy = new Map();
   out.walls = map.walls.map(w => { const c = { ...w }; copy.set(w, c); return c; });
   if (map.breakables) out.breakables = map.breakables.map(p => ({ ...p, wall: copy.get(p.wall) ?? { ...p.wall } }));
-  out._cover = new Map();
-  out._zmDoors = map._zmDoors ? map._zmDoors.map(w => copy.get(w) ?? { ...w }) : null;
+  if (map._cover) out._cover = new Map();
+  if (map._zmDoors) out._zmDoors = map._zmDoors.map(w => copy.get(w) ?? { ...w });
+  if (map._zmLayout) Object.defineProperty(out, '_zmLayout', { value: map._zmLayout, configurable: true, writable: true, enumerable: false });
   return out;
 }
 const HISTORY = 12;              // Ring of past positions: ~400 ms at 30 Hz.
@@ -1056,10 +1059,6 @@ export class Sim {
     this.thinkWork = THINK_WORK;
     this.brk.step(STEP);
 
-    if (this._shadow) {
-      if (this.phase === 'warmup') this._warmMore(WARM_TICK_MS);
-      else this._shadow = null;          // Live: whatever was played is what the engine has seen.
-    }
     if (this.phase === 'warmup') {
       this.phaseT -= STEP;
       if (this.phaseT <= 0) this._setPhase('live');
@@ -1069,6 +1068,12 @@ export class Sim {
         this.timeLeft = 0;
         this._end(this.rules?.timeUp ? this.rules.timeUp() : this.ffa ? this._ffaLeader(true) : this.scores[0] === this.scores[1] ? null : (this.scores[0] > this.scores[1] ? 0 : 1));
       }
+    }
+
+    // The countdown plays the warm-up match on (_warmUp), a slice a tick; the tick that goes live does not.
+    if (this._shadow) {
+      if (this.phase === 'warmup') this._warmMore(WARM_TICK_MS);
+      else this._shadow = null;          // Live: whatever was played is what the engine has seen.
     }
 
     if (this.phase === 'live') {

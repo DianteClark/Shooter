@@ -17,47 +17,55 @@ const MAX_EXPAND = 4000;    // Cells one big-map search may expand before it set
 const PULL_REACH = 40;      // Cells ahead a big-map path corner looks when pulling the string.
 
 export class NavGrid {
-  constructor(map) {
+  // `from`: make a copy of that grid for a throwaway sim on a copy of the map (Sim._warmUp). The tactical points,
+  // indexes and sector graph are shared (nothing changes them after the build), everything a match can change (blocked
+  // cells as walls break or doors open, turret danger, regions reopened) is its own. The search scratch is shared too:
+  // searches only compare stamps with their own id, and the two draw their ids from one counter, so neither ever reads
+  // the other's stamps. A copy is made by this constructor, field for field in the same order, so it has the same
+  // hidden class as every other grid: code the engine optimised on the copy stays optimised for the real one.
+  constructor(map, from = null) {
     this.map = map;
     this.w = Math.ceil(map.width / CELL);
     this.h = Math.ceil(map.height / CELL);
     const n = this.w * this.h;
-    this.blocked = new Uint8Array(n);
-    this.parent = new Int32Array(n);
-    this.g = new Float32Array(n);
-    this.stamp = new Uint32Array(n);
-    this.closed = new Uint32Array(n);
-    this.ids = { n: 0 };     // Search ids (stamps), shared with a fork: see fork.
-    this.heap = new Int32Array(n * 8);
-    this.heapF = new Float32Array(n * 8);
-    this.tmp = new Int32Array(n);
+    this.blocked = from ? from.blocked.slice() : new Uint8Array(n);
+    this.parent = from ? from.parent : new Int32Array(n);
+    this.g = from ? from.g : new Float32Array(n);
+    this.stamp = from ? from.stamp : new Uint32Array(n);
+    this.closed = from ? from.closed : new Uint32Array(n);
+    this.ids = from ? from.ids : { n: 0 };     // Search ids (stamps).
+    this.heap = from ? from.heap : new Int32Array(n * 8);
+    this.heapF = from ? from.heapF : new Float32Array(n * 8);
+    this.tmp = from ? from.tmp : new Int32Array(n);
     // Per team: cells covered by enemy turrets. A free-for-all (team 2 and up, see TEAMS) shares the first grid, painted
     // with every sentry on the map: there, everyone's turret is someone else's problem.
-    this.danger = [new Uint8Array(n), new Uint8Array(n)];
-    this._buildBlocked();
-    this.cover = [];    // Points next to vision-blocking walls.
-    this.holds = [];    // Points with a long sightline, each with the best angle for each team.
-    this._buildTactical();
+    this.danger = from ? from.danger.map(d => d.slice()) : [new Uint8Array(n), new Uint8Array(n)];
+    if (!from) this._buildBlocked();
+    this.cover = from ? from.cover : [];    // Points next to vision-blocking walls.
+    this.holds = from ? from.holds : [];    // Points with a long sightline, each with the best angle for each team.
+    if (!from) this._buildTactical();
     // Cell indexes over both lists: a bot looking for cover or a hold near it visits the points near it, in list
     // order, instead of every point on the map.
-    this.coverIndex = new PointIndex(this.cover);
-    this.holdIndex = new PointIndex(this.holds);
+    this.coverIndex = from ? from.coverIndex : new PointIndex(this.cover);
+    this.holdIndex = from ? from.holdIndex : new PointIndex(this.holds);
     this.regionOf = null;
-    if (n > BIG_CELLS) this._buildSectors();
+    // The last search's state (findPath), here so that every grid has it from the start.
+    this.partial = false; this.expanded = 0; this.gx = 0; this.gz = 0; this.size = 0;
+    if (n > BIG_CELLS) { if (from) this._shareSectors(from); else this._buildSectors(); }
   }
 
-  // A copy for a throwaway sim on a copy of the map (Sim._warmUp): the tactical points, indexes and sector graph are
-  // shared (nothing changes them after the build), everything a match can change (blocked cells as walls break or
-  // doors open, turret danger, regions reopened) is its own. The search scratch is shared too: searches only compare
-  // stamps with their own id, and the two draw their ids from one counter, so neither ever reads the other's stamps.
-  fork(map) {
-    const f = Object.create(NavGrid.prototype);
-    Object.assign(f, this);
-    f.map = map;
-    f.blocked = this.blocked.slice();
-    f.danger = this.danger.map(d => d.slice());
-    if (this.regionOf) f.regionOf = this.regionOf.slice();
-    return f;
+  fork(map) { return new NavGrid(map, this); }
+
+  // A copy's sector graph: the same fields in the same order as _buildSectors, the regions its own.
+  _shareSectors(f) {
+    this.sw = f.sw;
+    this.regionOf = f.regionOf.slice();
+    this.regionX = f.regionX; this.regionZ = f.regionZ; this.regionSector = f.regionSector;
+    this.linkStart = f.linkStart;
+    this.linkTo = f.linkTo;
+    this.sectorMark = f.sectorMark;
+    this.rG = f.rG; this.rParent = f.rParent; this.rStamp = f.rStamp; this.rClosed = f.rClosed;
+    this.rHeap = f.rHeap; this.rHeapF = f.rHeapF;
   }
 
   // Each movement-blocking wall marks the cells whose centre is within CLEARANCE of it: the same test the old
