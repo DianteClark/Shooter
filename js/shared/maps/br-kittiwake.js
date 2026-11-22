@@ -1,4 +1,4 @@
-// Battle royale (docs/DISTRICTS.md "The Coast"): Kittiwake Bay, 400 x 400 m, the second region. Four districts, each a
+// Battle royale (docs/DISTRICTS.md "The Coast"): Kittiwake Bay, 400 x 400 m, the third region. Four districts, each a
 // 6v6 map of its own built to fit the bay, are placed edge to edge and joined by the bay's roads, quays and causeways,
 // with the rest of the coast built round them:
 //   Fish Market (fishmarket)   the market hall on the harbour, west of the centre, on Harbour Road

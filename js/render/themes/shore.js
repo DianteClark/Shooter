@@ -1,4 +1,4 @@
-// Kittiwake Bay (docs/DISTRICTS.md "The Coast"): the second region's palette and pieces, for the giant-world streamer in
+// Kittiwake Bay (docs/DISTRICTS.md "The Coast"): the third region's palette and pieces, for the giant-world streamer in
 // themes/frontier.js (which builds every tile; this module adds its tables, the bay's own piece drawers as the `shore`
 // skin, the tile decor and the edge of the bay). A bright, windy morning: a low sun out of the east, a pale washed sky,
 // spray and sand on the wind, a cold green-grey sea with white water on the shallows. Its districts (Fish Market,

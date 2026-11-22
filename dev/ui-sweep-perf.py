@@ -2,7 +2,7 @@
 """Perf overlay numbers in real matches (ROADMAP item 37): python3 dev/ui-sweep-perf.py [port] [outdir] [--root=DIR] [--q=low|high] [cases]
 
 At 932x430 in headless Chromium (SwiftShader, so frame and script ms only compare runs on this machine; draw calls and
-triangles are exact), with the perf overlay on (?fps=1). Cases: br (Quads on Frontier, after the jump, on the ground), brjade (the same on Jadefall), brcity (the same on Meridian City), brbay (the same on Kittiwake Bay), gwtide and gwcoral (Ground War on Jadefall's coast),
+triangles are exact), with the perf overlay on (?fps=1). Cases: br (Quads on Frontier, after the jump, on the ground), brjade (the same on Jadefall), brcity (the same on Meridian City), brbay (the same on Kittiwake Bay), brsirocco (the same on Sirocco Basin), gwtide and gwcoral (Ground War on Jadefall's coast),
 gw (Ground War TDM on Harvest), tdmlaunch, tdmobs, tdmpagoda (the 1120 6v6 maps), cpboss (campaign mission 8 at the
 boss, from the Campaign tab), zm20 (Graveyard Shift round 20 on Ashgrove with every gate open, the horde full, traps
 on and sentries out, as dev/sim-zombies.mjs's perf section), tdm (Railyard, for scale). Prints the median and worst of
@@ -27,7 +27,7 @@ SUIT_OPS = ['trooper', 'ronin', 'monarch', 'coyote', 'ox', 'harrow', 'flint', 'n
 ARGS = ['--use-angle=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist', '--enable-unsafe-swiftshader',
         '--disable-background-timer-throttling', '--disable-renderer-backgrounding']
 G = 'window.__game.app'
-CASES = [('br', 'frontier', 'br'), ('brjade', 'jadefall', 'br'), ('brcity', 'meridian', 'br'), ('brbay', 'kittiwake', 'br'), ('gw', 'harvest', 'gwtdm'), ('gwtide', 'tidebreak', 'gwtdm'), ('gwcoral', 'coral', 'gwtdm'), ('zm20', 'ashgrove', 'zm'), ('zm20neon', 'neon', 'zm'), ('tdm', 'railyard', 'tdm'),
+CASES = [('br', 'frontier', 'br'), ('brjade', 'jadefall', 'br'), ('brcity', 'meridian', 'br'), ('brsirocco', 'sirocco', 'br'), ('brbay', 'kittiwake', 'br'), ('gw', 'harvest', 'gwtdm'), ('gwtide', 'tidebreak', 'gwtdm'), ('gwcoral', 'coral', 'gwtdm'), ('zm20', 'ashgrove', 'zm'), ('zm20neon', 'neon', 'zm'), ('tdm', 'railyard', 'tdm'),
          # 1118 wave: Millbrook, Graveyard Shift round 20 on Polestar Relay, and a replay's playback (a TDM on Railyard,
          # ended after 20 s, Watch replay from the results: the replay player's own renderer and frame cost).
          ('tdmmill', 'millbrook', 'tdm'), ('zm20polestar', 'polestar', 'zm'), ('zm20wrenfield', 'wrenfield', 'zm'), ('replay', 'railyard', 'tdm'),
@@ -99,7 +99,7 @@ async def run(browser, name, mapId, mode, rows):
           const ids = [...c.opById.keys()];
           c.setRoster(ids.map((id, i) => ({{ id, operator: ops[i % ops.length], skin: `skin:${{ops[i % ops.length]}}-5` }})));
           return ids.length; }})()"""))
-    if name in ('br', 'brjade', 'brcity', 'brbay'):
+    if name in ('br', 'brjade', 'brcity', 'brsirocco', 'brbay'):
         await pg.wait_for_function(f'{G}.match.interp.newest.br?.plane?.f > 0.25', timeout=180000)
         await pg.locator('.br-jump-map').first.click()
         await pg.wait_for_function(f'(() => {{ const p = {G}.match.interp.newest.players.find(q => q.id === {G}.match.localId); return p && !p.air; }})()', timeout=180000)
@@ -111,6 +111,9 @@ async def run(browser, name, mapId, mode, rows):
     if name == 'brbay':
         # The busiest view in the bay: the Shipyard's west yard, the dock, the gantries and the opened sheds round it.
         await ev(f"(() => {{ const m = {G}.match, me = m.sim.byId.get(m.localId); m.sim._placeAt(me, {{ x: 168, z: 176 }}, 0); }})()")
+    if name == 'brsirocco':
+        # The densest view in the basin: the Caravanserai's courtyard, the souk, the Souk Quarter and Lower Town round it.
+        await ev(f"(() => {{ const m = {G}.match, me = m.sim.byId.get(m.localId); m.sim._placeAt(me, {{ x: 194, z: 196 }}, 0); }})()")
         await pg.wait_for_timeout(4000)
     if name == 'cpboss':
         R = f'{G}.match.sim.rules'
