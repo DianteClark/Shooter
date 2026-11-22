@@ -3149,7 +3149,8 @@ export class HUD {
     let won = winner === myTeam, at = 0;
     if (this.ffa && view) { at = ffaRank(view).findIndex(p => p.team === myTeam) + 1; won = won || (!drawn && at === 1); }
     const outcome = drawn ? 'draw' : won ? 'win' : 'loss';
-    const head = matchHeader({ modeId: this.modeId, outcome, scores: view?.scores, myTeam, roster: view?.players ?? [], localId: view?.localId, practice: !!this.training });
+    const bf = (view?.obj ?? view?.points?.obj)?.bf ? (view.obj ?? view.points.obj) : null;     // Conquest and Breakthrough: how it ended.
+    const head = matchHeader({ modeId: this.modeId, outcome, scores: view?.scores, myTeam, roster: view?.players ?? [], localId: view?.localId, practice: !!this.training, bfView: bf });
     this.endEl.dataset.result = this.ffa ? (won ? 'win' : drawn || at <= 3 ? 'draw' : 'loss') : outcome;
     this.endEl.querySelector('b').textContent = head.word;
     // Search and Destroy: the score in rounds and how the last one went.

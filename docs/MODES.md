@@ -143,6 +143,8 @@ means something. `python3 dev/ui-endings-test.py [port]` ends a match of every m
 | TDM, Kill Confirmed, Domination, Hardpoint, Headquarters, Kill Order, Grind (and their Ground War versions) | Victory / Defeat / Draw | The yard is yours / lost / Neither side broke through | team score, yours - theirs |
 | Search and Destroy, Control, Showdown | Victory / Defeat / Draw | Won 4 rounds to 2 (Lost ..., Level at N rounds each); S&D's banner adds how the last round went | rounds won, 6 - 4 |
 | Capture the Flag | Victory / Defeat / Draw | Won 3 captures to 1 (Lost ..., Level at ...) | captures, yours - theirs |
+| Conquest | Victory / Defeat / Draw | Their tickets ran out, More tickets at the clock (and the losing side's own) | tickets left, yours - theirs |
+| Breakthrough | Victory / Defeat | Broke through all 3 sectors, Out of tickets (or time) at sector 2 of 3, Held at sector 2 of 3, All 3 sectors fell | sectors: taken (attackers) - still standing (defenders) |
 | Infected | Victory / Defeat (by the side you ended on) | You held out to the end / N survivors held out / Everyone was infected | one number: Survivors N |
 | Free-for-All, Gun Game, One in the Chamber | 1st place / 2nd place / ... | Nobody else came close, One short of the top, On the podium, or who took the yard (Gun Game: Through every gun) | your score - the best other score (Gun Game: guns) |
 | Battle Royale, Duos, Solos, Rebound | Victory, or 3rd place | Last squad standing, or #3 of 8 squads (players in Solos) | one number: #3, "of 8 squads" |
