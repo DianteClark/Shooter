@@ -13,7 +13,7 @@
 //              an older clip without the extra still unpacks
 //   nav        breaking a wall between two points shortens the walk; a bot walking round it replans through the hole
 //   bots       Ground War bot matches: bots throw frags at walls in their way, pieces break, nobody gets stuck
-//   perf       tick cost with destruction on and off, blast cost, a big map's sector rebuild, snapshot size
+//   perf       tick cost with destruction on and off, blast cost, a big map's nav patch, snapshot size
 import { Sim, buildRoster } from '../js/sim/sim.js';
 import { MAPS, MAP_IDS, BR_MAP_IDS } from '../js/shared/map.js';
 import { SIM_HZ } from '../js/shared/constants.js';
@@ -401,12 +401,21 @@ console.log('perf');
   const blastUs = (performance.now() - t0) / 2000 * 1000;
   console.log(`    a blast on Frontier (${sim.brk.n} pieces): ${blastUs.toFixed(1)} us`);
   ok(blastUs < 200, 'a blast costs well under a millisecond', blastUs.toFixed(1));
-  // The big map's sector rebuild after an opening.
-  const t1 = performance.now();
-  sim.nav._buildSectors();
-  const secMs = performance.now() - t1;
-  console.log(`    Frontier sector graph rebuild: ${secMs.toFixed(1)} ms (at most every 2 s, only after a break)`);
-  ok(secMs < 400, 'the sector rebuild is a one-off cost', secMs.toFixed(1));
+  // A big map's nav after an opening: the cells patched into their sector's regions, and a route through them.
+  const inner = sim.brk.list.find(q => q.mat === 'light' && q.wall.blocksVision && !q.pile && Math.min(q.w, q.d) < 1);
+  if (inner) {
+    const [ix, iz] = centre(inner), across = inner.w < inner.d ? [1, 0] : [0, 1];
+    const before = sim.nav.regionOf[sim.nav.idx(ix, iz)];
+    const t1 = performance.now();
+    sim.brk.blast({ x: ix, z: iz }, 6, 'charge', 'bang');
+    const patchMs = performance.now() - t1;
+    const after = sim.nav.regionOf[sim.nav.idx(ix, iz)];
+    const out = new Float32Array(256);
+    const n = sim.nav.findPath(ix - across[0] * 2, iz - across[1] * 2, ix + across[0] * 2, iz + across[1] * 2, out, 128);
+    console.log(`    Frontier: a wall down and the nav patched in ${patchMs.toFixed(2)} ms (a full sector rebuild would be tens of ms)`);
+    ok(before < 0 && after >= 0 && n > 0, 'on a giant map the opening joins the sector graph at once and routes through it', [before, after, n]);
+    ok(patchMs < 20, 'and costs next to nothing', patchMs.toFixed(2));
+  }
   if (snapBytes) console.log(`    snapshot: ${snapBytes.chars} characters for ${snapBytes.pieces} broken pieces (a 6v6 snapshot is about ${snapBytes.snapshot})`);
   resetBreakables(MAPS.frontier);
 }

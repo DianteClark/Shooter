@@ -57,8 +57,9 @@ and only when nothing that blocks vision stands between the blast and the piece.
 ## Sim (js/sim/destruction.js, host only)
 `sim.brk = new Destruction(sim)`. Off in Graveyard Shift, the campaign, the range, training and Showdown. Hooks:
 `Sim._emit` sees every `explosion` event and every `bang` of a blast kind and calls `brk.blast`; `applyShot` hands
-wall rays to `brk.bullet`. A piece that breaks: wall flags change, `reblockNav` re-marks the nav cells round it (big
-maps rebuild the sector graph, at most every 2 s), bots whose path passes near it replan, and the event
+wall rays to `brk.bullet`. A piece that breaks: wall flags change, `reblockNav` re-marks the nav cells round it (on big
+maps `NavGrid.reopen` joins the opened cells to their sector's regions: a break only opens ground, so the graph stays
+safe without a rebuild that would cost tens of ms on a giant map), bots whose path passes near it replan, and the event
 `{t:'brk', i, s, x, z, m, dx, dz}` goes out (s = new stage, m = material index, dx dz = push direction).
 Bots: a bot walking a long way round a breakable light wall or shed that stands between it and its goal may throw its
 frag (or fire its launcher) at it (js/sim/bots.js `_thinkBreach`).
@@ -96,8 +97,10 @@ fairness, the giant checks); `--intact` skips that pass.
 - Draw calls: unchanged (dev/perf-render.mjs on Low, before / after: Railyard 25 / 25, Riverbend 24 / 24, Downtown
   36 / 35). Triangles submitted: +2% to +10% (the collapsed rubble sets: Riverbend world 48k -> 52k), and breaking
   changes neither (ranges are rewritten in place, dev/ui-destruction-test.py checks both).
-- Host sim: a blast on Frontier's 424 pieces costs about 1 us; Frontier's sector graph rebuild after an opening 3 ms
-  (at most every 2 s); a Ground War tick with destruction on and off is the same within noise.
+- Host sim: a blast on Frontier's 424 pieces costs 1 to 16 us (the line-of-sight tests to the pieces in reach); the nav
+  patch after a wall goes down on Frontier 0.3 ms (a full sector rebuild there is 30 to 160 ms, so it is never done);
+  a Ground War tick with destruction on and off is the same within noise (0.3 to 0.5 ms here).
 - Wire: about one character per broken piece (`encodeBreak`), so ten broken pieces add ten bytes to a snapshot of about
   880, and only while it is being sent (1 s after a change, then twice a second).
-- Bots: in a 90 s Ground War match with frags, 7 to 10 breach throws; 18 to 30 pieces broken by bots in all.
+- Bots: Ground War with frags, 150 s each on Downtown, Expedition and Harvest: 16 breach throws and 97 pieces broken by
+  bots in all (637 kills), nobody stuck.

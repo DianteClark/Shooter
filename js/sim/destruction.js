@@ -21,7 +21,6 @@ const LIGHT_BLAST = new Set(['frag', 'sticky', 'mine', 'cluster', 'bomblet', 'im
 // Structural damage per round, as a share of the round's own damage, by gun category. Glass takes any round whole.
 const CHIP = { LMG: 0.55, Marksman: 0.8, Sniper: 1.3, Shotgun: 0.45 };
 const REPLAN_NEAR = 32;           // Bots this close to a broken piece, or heading this close to it, replan.
-const SECTOR_EVERY = 2;           // Seconds between big-map sector rebuilds.
 const SEND_FOR = 30;              // Ticks the break string rides every snapshot after a change.
 const SEND_EVERY = 15;            // Otherwise every this many ticks.
 
@@ -57,8 +56,6 @@ export class Destruction {
     this.dirty = false;
     this.any = false;             // Anything ever changed this match: from then on the string goes out (it may be '').
     this.changedTick = -999;
-    this.sectorT = 0;
-    this.sectorDirty = false;
     this.breaks = 0;
     this._near = null;
   }
@@ -181,12 +178,12 @@ export class Destruction {
     sim._emit({ t: 'brk', i: id, s, x: r2(p.x + p.w / 2), z: r2(p.z + p.d / 2), m: MATERIALS.indexOf(p.mat), dx: r2(dx), dz: r2(dz), by });
   }
 
-  // Re-marks the nav cells round a piece's old rect; a big map's sector graph is rebuilt at most every SECTOR_EVERY.
+  // Re-marks the nav cells round a piece's old rect; on a big map the opened cells join their sector's regions.
   _reblock(p) {
     const nav = this.sim.nav;
     if (!nav) return;
     reblockNav(nav, this.sim.map, p);
-    if (nav.regionOf) this.sectorDirty = true;
+    if (nav.regionOf) nav.reopen(p.x - 2, p.z - 2, p.x + p.w + 2, p.z + p.d + 2);
   }
 
   // Bots near the opening, or bound for somewhere near it, look for a better way (the path budget spreads the work).
@@ -203,15 +200,8 @@ export class Destruction {
     }
   }
 
-  // Per tick, host only.
-  step(dt) {
-    if (!this.sectorDirty) return;
-    this.sectorT -= dt;
-    if (this.sectorT > 0) return;
-    this.sectorT = SECTOR_EVERY;
-    this.sectorDirty = false;
-    this.sim.nav?._buildSectors();
-  }
+  // Per tick, host only. Nothing runs on a timer today (a big map's nav is patched in place, see NavGrid.reopen).
+  step(dt) {}
 
   // The intact breakable piece (light wall or shed class) nearest a segment, within `pad` of it, or null: what a bot
   // walking from a to b could blow a way through. Returns the piece.
