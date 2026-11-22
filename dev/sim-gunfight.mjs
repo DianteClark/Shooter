@@ -21,7 +21,8 @@ const GF_MAPS = MAP_IDS.filter(id => modeFitsMap(MAPS[id], 'gf'));
 
 function units() {
   console.log('units');
-  check(GF_MAPS.length >= 2 && GF_MAPS.length <= 6 && GF_MAPS.every(id => MAPS[id].size === 'small'), `small maps only: ${GF_MAPS.join(', ')}`);
+  // Union Square, Red Gulch and Spillway (1122 wave) made eight; the cap only guards against the filter letting every map in.
+  check(GF_MAPS.length >= 2 && GF_MAPS.length <= 12 && GF_MAPS.every(id => MAPS[id].size === 'small'), `small maps only: ${GF_MAPS.join(', ')}`);
   check(MODES.gf.teamSize === 2 && MODES.gf.scoreLimit === 6 && MODES.gf.timeLimit === 40, '2 v 2, first to 6, 40 s rounds');
   check(cleanMods(['snipers', 'hardcore'], 'gf').join() === 'hardcore', 'deals its own guns: Snipers Only does not apply, Hardcore does');
   check(FEATURED.some(f => f.mode === 'gf'), 'in the featured rotation');
