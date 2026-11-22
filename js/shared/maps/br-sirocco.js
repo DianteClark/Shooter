@@ -89,13 +89,16 @@ function build() {
   // own ground region `reg` (themes/basin.js colours and dresses them).
   const poi = (id, name, x, z, r, reg, tier) => { P.poi(id, name, x, z, r, 'desert', tier); P.region = reg; };
   const keep = (x, z, w, d, m = 3) => P.keepOut.push({ x: x - m, z: z - m, w: w + 2 * m, d: d + 2 * m });
-  // A crag of rock (the streamer's rock masses), cut into pieces no longer than `seg` so each tile draws its own.
-  const crag = (x, z, w, d, h, m = 1.6) => {
+  // A cliff wall of layered sandstone (the districts' own cliff drawer, themes/sirocco.js), cut into pieces no longer
+  // than 16 m so each tile draws its own; the pieces touch end to end. Tested once, whole: it may run to the map's edge.
+  const cliffWall = (x, z, w, d, h) => {
+    if (P.keepOut.some(k => x < k.x + k.w && x + w > k.x && z < k.z + k.d && z + d > k.z) || P.near(x, z, w, d, 1.6).size) return false;
     const seg = 16, along = w >= d, L = along ? w : d;
     for (let s = 0; s < L - 0.01; s += seg) {
       const n = Math.min(seg, L - s);
-      if (along) T(x + s, z, n, d, h, 'rock', { crag: true }, m); else T(x, z + s, w, n, h, 'rock', { crag: true }, m);
+      if (along) A(x + s, z, n, d, h, 'rock', { cliff: true, skin: 'sirocco' }); else A(x, z + s, w, n, h, 'rock', { cliff: true, skin: 'sirocco' });
     }
+    return true;
   };
   // Extraction's landing zones, reserved before anything is placed so nothing lands on them (see br.exfils).
   const LZ_RING = [[334, 63], [74, 352], [186, 364], [56, 312], [100, 80], [378, 206], [338, 384]];
@@ -128,14 +131,15 @@ function build() {
   district('caravanserai', caravanserai, 'Caravanserai', 44, 1, 'mudbrick', 'dunes');
   district('redgulch', redgulch, 'Red Gulch', 26, 2, 'ksar', 'gulch');
   district('signalridge', signalridge, 'Signal Ridge', 34, 2, 'prefab', 'gulch');
-  district('copperstep', copperstep, 'Copperstep', 36, 2, 'tin', 'spoil');
+  district('copperstep', copperstep, 'Copperstep', 36, 2, 'tinshed', 'spoil');
 
   // ---- The canyon: its two walls run west from the gulch to the edge, with a pass through each for the west track ----
   P.region = 'gulch'; P.tier = 3;
-  crag(0, 163, 26, 16, 8); crag(34, 163, 104, 16, 8);
-  crag(0, 221, 26, 16, 8); crag(34, 221, 104, 16, 8);
-  // The cliff faces broken up where they meet the canyon floor.
-  for (const [x, z, w, d] of [[8, 179, 6, 2.4], [44, 179, 9, 3], [66, 179, 5, 2], [16, 218.6, 7, 2.4], [52, 218, 6, 3], [72, 219, 5, 2]]) A(x, z, w, d, 5, 'rock', { crag: true });
+  // (The final landing zones at the Seam's two ends keep the walls 1-2 m short of it.)
+  cliffWall(0, 163, 26, 16, 8); cliffWall(34, 163, 100, 16, 8);
+  cliffWall(0, 221, 26, 16, 8); cliffWall(34, 221, 100, 16, 8);
+  // Fallen rock at the cliff feet, where they meet the canyon floor.
+  for (const [x, z, w, d] of [[8, 179, 6, 2.4], [44, 179, 9, 3], [66, 179, 5, 2], [16, 218.6, 7, 2.4], [52, 218, 6, 3], [72, 219, 5, 2]]) A(x, z, w, d, 3.4, 'rock', { crag: true });
 
   // ---- Gulch Mouth (the canyon floor west of Red Gulch): mud houses either side of the road -----------------------------
   poi('mouth', 'Gulch Mouth', 46, 200, 30, 'gulch', 3);
@@ -161,9 +165,9 @@ function build() {
   poi('halt', 'Rail Halt', 86, 52, 40, 'scrub', 2);
   P.zones.push({ x: 0, z: 30, w: 300, d: 13, kind: 'ballast' }, { x: 40, z: 19, w: 100, d: 8, kind: 'ballast' }, { x: 52, z: 43, w: 48, d: 3, kind: 'platform' });
   B(56, 46, 34, 12, { h: 4.6, style: 'station', furnish: 2, chest: true, loot: 7, doors: [['n', 0.25], ['n', 0.75], ['s', 0.3], ['s', 0.7], ['w', 0.5], ['e', 0.5]] });
-  B(100, 50, 20, 14, { h: 5.4, style: 'tin', split: false, furnish: 2, loot: 6, doors: [['n', 0.5, 3.2], ['s', 0.5, 3.2], ['w', 0.5], ['e', 0.5]] });
+  B(100, 50, 20, 14, { h: 5.4, style: 'tinshed', split: false, furnish: 2, loot: 6, doors: [['n', 0.5, 3.2], ['s', 0.5, 3.2], ['w', 0.5], ['e', 0.5]] });
   B(20, 50, 12, 9, { style: 'mudbrick', h: 3.6 });
-  B(122, 6, 12, 9, { style: 'tin', h: 3.8, doors: [['s', 0.3], ['s', 0.75], ['w', 0.5]] });
+  B(122, 6, 12, 9, { style: 'tinshed', h: 3.8, doors: [['s', 0.3], ['s', 0.75], ['w', 0.5]] });
   P.skin = 'sirocco';
   A(40, 52, 3, 3, 7.5, 'crane', { watertower: true });
   for (const [x, z] of [[14, 32.7], [38, 32.7], [110, 37.7], [150, 32.7], [180, 37.7], [62, 21.7], [92, 21.7]]) T(x, z, 10, 2.6, 2.8, 'container', { wagon: true, boxcar: true }, 1.2);
@@ -174,7 +178,7 @@ function build() {
 
   // ---- The Citadel (north): the old fort's walls and towers, the keep and barracks inside, gates on all four sides -----
   poi('citadel', 'The Citadel', 205, 74, 40, 'scrub', 1);
-  P.zones.push({ x: 170, z: 54, w: 70, d: 40, kind: 'court' });
+  P.zones.push({ x: 170, z: 54, w: 70, d: 40, kind: 'serai' });
   {
     const x0 = 168, z0 = 52, x1 = 242, z1 = 96, t = 1.6, hh = 4.4;
     P.skin = 'sirocco';
@@ -241,7 +245,7 @@ function build() {
   // ---- Pump Station (east, at the end of the ridge track): the pump house, tanks, the pipeline ---------------------------
   poi('pumps', 'Pump Station', 372, 160, 26, 'scrub', 2);
   P.zones.push({ x: 348, z: 120, w: 48, d: 60, kind: 'apron' });
-  B(352, 126, 20, 12, { h: 5, style: 'tin', split: false, furnish: 2, chest: true, loot: 6, doors: [['s', 0.3, 3], ['s', 0.75], ['n', 0.5], ['w', 0.5]] });
+  B(352, 126, 20, 12, { h: 5, style: 'tinshed', split: false, furnish: 2, chest: true, loot: 6, doors: [['s', 0.3, 3], ['s', 0.75], ['n', 0.5], ['w', 0.5]] });
   B(378, 160, 14, 10, { h: 4, style: 'prefab', furnish: 1, doors: [['w', 0.5], ['n', 0.5]] });
   P.skin = 'sirocco';
   for (const [x, z] of [[352, 162], [360, 170], [378, 128]]) T(x, z, 4, 4, 3.6, 'container', { tank: true }, 1.4);
@@ -281,9 +285,9 @@ function build() {
   // ---- Saltworks (south-west): the salt pans, the sheds, heaps of salt -------------------------------------------------
   poi('salt', 'Saltworks', 86, 360, 40, 'saltpan', 3);
   P.zones.push({ x: 40, z: 326, w: 92, d: 22, kind: 'saltpan' }, { x: 100, z: 352, w: 40, d: 40, kind: 'saltpan' });
-  B(48, 370, 24, 12, { h: 5, style: 'tin', split: false, furnish: 2, chest: true, loot: 6, doors: [['n', 0.3, 3], ['n', 0.75], ['s', 0.5], ['e', 0.5]] });
+  B(48, 370, 24, 12, { h: 5, style: 'tinshed', split: false, furnish: 2, chest: true, loot: 6, doors: [['n', 0.3, 3], ['n', 0.75], ['s', 0.5], ['e', 0.5]] });
   B(14, 352, 12, 9, { h: 3.6, style: 'prefab', doors: [['e', 0.5], ['n', 0.5]] });
-  B(84, 384, 12, 9, { h: 3.6, style: 'tin' });
+  B(84, 384, 12, 9, { h: 3.6, style: 'tinshed' });
   P.skin = 'sirocco';
   for (const [x, z] of [[50, 334], [64, 338], [80, 332], [96, 338], [112, 334], [108, 362], [122, 374]]) T(x, z, 4, 3, 2.2, 'rock', { saltheap: true }, 1.6);
   P.skin = null;
@@ -316,7 +320,7 @@ function build() {
   poi('smelter', 'Smelter', 368, 284, 32, 'spoil', 2);
   P.zones.push({ x: 344, z: 256, w: 52, d: 60, kind: 'slag' });
   B(348, 258, 30, 16, { h: 6.4, style: 'industrial', split: false, furnish: 2, chest: true, loot: 8, doors: [['s', 0.3, 3], ['s', 0.75, 3], ['n', 0.5], ['w', 0.5], ['e', 0.5]] });
-  B(352, 290, 16, 10, { h: 4.2, style: 'tin', furnish: 2, doors: [['n', 0.5], ['w', 0.5], ['e', 0.5]] });
+  B(352, 290, 16, 10, { h: 4.2, style: 'tinshed', furnish: 2, doors: [['n', 0.5], ['w', 0.5], ['e', 0.5]] });
   A(384, 262, 3, 3, 16, 'building', { stack: true, skin: 'foundry' });
   A(384, 270, 3, 3, 13, 'building', { stack: true, skin: 'foundry' });
   P.skin = 'sirocco';
@@ -324,6 +328,22 @@ function build() {
   for (const [x, z] of [[372, 286], [344, 284], [388, 290]]) T(x, z, 2.6, 1.4, 1.3, 'barrier', { orecart: true }, 1.2);
   P.skin = null;
   P.outdoorLoot(368, 284, 32, 8, 2);
+
+  // ---- The Fork's trading post (between the ridge and the mine, east of the Fork Road): a walled yard of mud stores
+  // round a well, wagons drawn up outside. No place of its own (it is Conquest's flag E, "The Fork").
+  P.region = 'dunes'; P.tier = 3;
+  B(270, 184, 14, 10, { style: 'mudbrick', h: 3.8, furnish: 2, doors: [['s', 0.3], ['s', 0.75], ['w', 0.5]] });
+  B(296, 183, 12, 9, { style: 'ksar', h: 4.6, chest: true, doors: [['s', 0.5], ['e', 0.5]] });
+  B(318, 185, 14, 10, { style: 'mudbrick', h: 3.8, doors: [['s', 0.5], ['w', 0.5]] });
+  B(274, 207, 12, 9, { style: 'ksar', h: 4.2, doors: [['n', 0.5], ['e', 0.5]] });
+  B(306, 206, 16, 10, { style: 'mudbrick', h: 3.8, furnish: 2, doors: [['n', 0.3], ['n', 0.75], ['e', 0.5]] });
+  P.skin = 'sirocco';
+  A(292.6, 197.2, 2.8, 2.8, 1.0, 'barrier', { well: true });
+  T(334, 198, 5, 2.2, 2.4, 'container', { wagon: true }, 1.4);
+  T(262.6, 199, 2.2, 5, 2.4, 'container', { wagon: true }, 1.4);
+  for (const [x, z, al] of [[322, 199, 1], [282, 199, 0]]) T(x, z, al ? 2.2 : 0.9, al ? 0.9 : 2.2, 1.7, 'barrier', { camel: true }, 1.4);
+  P.skin = null;
+  P.outdoorLoot(298, 200, 26, 6, 3);
 
   // ---- The open desert: outcrops, boulders and dunes where nothing else stands -------------------------------------------
   P.region = 'dunes'; P.tier = 3;

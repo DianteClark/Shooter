@@ -77,7 +77,7 @@ function build() {
 
   const zones = [{ x: 0, z: 27, w: W, d: 10, kind: 'road' },
     { x: 0, z: 4.6, w: W, d: 6.6, kind: 'souk' }, { x: 0, z: 52.8, w: W, d: 6.6, kind: 'souk' },
-    { x: 31.2, z: 13.2, w: 37.6, d: 37.6, kind: 'court' }];
+    { x: 31.2, z: 13.2, w: 37.6, d: 37.6, kind: 'serai' }];
 
   return {
     id: 'caravanserai', name: 'Caravanserai', theme: 'sirocco', size: 'large', region: 'desert',

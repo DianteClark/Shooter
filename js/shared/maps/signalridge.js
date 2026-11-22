@@ -57,8 +57,8 @@ function build() {
   // Capture the Flag (see flagBases): on the road in front of the spawns.
   points.ctf = flagBases(W, H, { x: 6.4, z: 23 });
 
-  const zones = [{ x: 0, z: 20, w: W, d: 6, kind: 'road' }, { x: 14, z: 13, w: 8, d: 5.2, kind: 'yard' }, { x: 54, z: 27.8, w: 8, d: 5.2, kind: 'yard' },
-    { x: 30, z: 17, w: 16, d: 12, kind: 'apron' }];
+  const zones = [{ x: 0, z: 20, w: W, d: 6, kind: 'road' }, { x: 14, z: 13, w: 8, d: 5.2, kind: 'compound' }, { x: 54, z: 27.8, w: 8, d: 5.2, kind: 'compound' },
+    { x: 30, z: 17, w: 16, d: 12, kind: 'pad' }];
 
   return {
     id: 'signalridge', name: 'Signal Ridge', theme: 'sirocco', size: 'medium', region: 'desert',

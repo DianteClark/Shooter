@@ -24,8 +24,8 @@ function build() {
 
     // ---- The north row of tower houses (z 7.5-14) and the south row (z 22-28.5), west of the plaza, split by the
     // alleys at x 14-17.
-    towerHouse(6, 7.5, 8, 6.5, 6.4), towerHouse(17, 8, 6.4, 6, 8),
-    towerHouse(5, 22, 9, 6.5, 6), towerHouse(17, 22.4, 6, 6, 7.6),
+    towerHouse(6, 7.5, 8, 6.5, 5.2), towerHouse(17, 8, 6.4, 6, 5.8),
+    towerHouse(5, 22, 9, 6.5, 4.8), towerHouse(17, 22.4, 6, 6, 5.4),
 
     // ---- The main street (z 14-22): a cart, a water trough by the plaza, crates by the doors.
     cart(9, 19.2), trough(21.2, 16.6, 0.9, 2.8), crate(15, 15.2),
@@ -53,7 +53,7 @@ function build() {
   // Capture the Flag (see flagBases): on the main street in front of the spawns.
   points.ctf = flagBases(W, H, { x: 7, z: 18 });
 
-  const zones = [{ x: 0, z: 14.6, w: W, d: 6.8, kind: 'road' }, { x: 23.4, z: 14, w: 9.2, d: 8, kind: 'plaza' },
+  const zones = [{ x: 0, z: 14.6, w: W, d: 6.8, kind: 'road' }, { x: 23.4, z: 14, w: 9.2, d: 8, kind: 'gulchsq' },
     { x: 0, z: 2.4, w: W, d: 5, kind: 'ledge' }, { x: 0, z: 28.6, w: W, d: 5, kind: 'ledge' }];
 
   return {
