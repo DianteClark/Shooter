@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-22', title: 'Meridian City',
+    build: '1122-2', date: '2026-11-22', title: 'Meridian City',
     items: [
       'A new Battle Royale map, Meridian City: one huge city at blue hour, its lights coming on. Four new districts sit in the middle of it, side by side along the boulevard: the Old Quarter, Midtown, Canal Row, and Union Square south of Midtown.',
       'Each district is also a new map of its own for 6 v 6: Midtown (large: towers either side of Monument Plaza), Old Quarter (medium: brownstones round Fountain Square), Canal Row (medium: warehouses either side of a canal and its three bridges) and Union Square (small: round the bandstand).',
