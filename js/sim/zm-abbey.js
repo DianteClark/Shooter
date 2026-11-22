@@ -59,6 +59,7 @@ export function feedFonts(E, target) {
 export function stepFonts(E, dt) {
   const q = E.quest, Q = ZE.quest;
   if (q.state) { q.woke = 0; return; }
+  if (E.R.state !== 1) return;      // Between rounds there is nothing to drink: no thirst.
   for (let i = 0; i < E.L.relics.length; i++) {
     if (!(q.woke & (1 << i))) continue;
     q.thirst[i] = (q.thirst[i] ?? 0) + dt;

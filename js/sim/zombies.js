@@ -290,9 +290,13 @@ export class ZmRules {
       for (const s of list) cands.push(s);
     });
     if (!cands.length) return null;
+    // A font drinking (Saltmere Abbey): it calls the drowned, a share of them climbing out near it.
+    let pool = cands;
+    const call = this.econ.fontCall?.();
+    if (call && this.rng() < ZE.quest.call) { const near = cands.filter(s => Math.hypot(s.x - call.x, s.z - call.z) < 20); if (near.length) pool = near; }
     let best = null, bestS = -Infinity;
     for (let k = 0; k < 14; k++) {
-      const s = cands[Math.floor(this.rng() * cands.length)];
+      const s = pool[Math.floor(this.rng() * pool.length)];
       let d = BIG;
       const cell = Math.floor(s.z) * sim.nav.w + Math.floor(s.x);
       for (const f of fields) if (f) d = Math.min(d, f.dist[cell]);

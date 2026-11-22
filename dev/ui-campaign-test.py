@@ -10,6 +10,8 @@ Mission complete with the stars and the campaign's XP lines; the save has missio
 earned, and the Campaign tab now opens mission 2. Then, with every mission opened in the save, a look at mission 2's
 watchmen and their torches and at mission 8's boss with his barrage rings, a friend room set to mission 3 (one squad
 of four) started, the briefing at 667x375, and a guest over the local net in the host's squad, following the script.
+Operation Starfall: the route map switched to it (four stations), Dark Sky's briefing, its night (the dark round the
+player, a flare lifting it) and Zero Hour's Director Vane (his salvo, his crest, the launch clock).
 Screenshots go to outdir (default /tmp/campaign). Fails on any console error and on HUD panels that spill off the screen.
 """
 import asyncio, subprocess, sys, time, os, json
@@ -41,6 +43,10 @@ OVERFLOW = """((sels) => {
 })"""
 
 # Every mission open (mission k cleared on Regular for k < 7), so the later missions can be deployed.
+# Nightrail done and the first three of Starfall: every mission open.
+OPEN_STARFALL = """(() => { const s = JSON.parse(localStorage.getItem('switchyard.save'));
+  s.cp = Object.fromEntries(Array.from({ length: 11 }, (_, i) => [`m${i + 1}`, [2, 1, 400]]));
+  localStorage.setItem('switchyard.save', JSON.stringify(s)); })()"""
 OPEN_ALL = """(() => { const s = JSON.parse(localStorage.getItem('switchyard.save'));
   s.cp = { m1: [2, 1, 400], m2: [2, 0, 500], m3: [2, 0, 500], m4: [2, 0, 500], m5: [2, 0, 500], m6: [2, 0, 500], m7: [2, 0, 500] };
   localStorage.setItem('switchyard.save', JSON.stringify(s)); })()"""
@@ -315,11 +321,68 @@ async def main():
             await pg.wait_for_timeout(800)
             await shot('13-boss-phase')
 
+            print('Operation Starfall: the route map, the night, the hostage, Vane')
+            await ev(f"(() => {{ const R = {R}; R.state = 3; R.stateT = 99; }})()")
+            await until("document.querySelector('.menu')?.dataset.screen === 'results'", 40, 250)
+            await ev(OPEN_STARFALL)
+            await pg.goto(f'http://localhost:{PORT}/?debug=1')
+            await pg.wait_for_timeout(1500)
+            await tap('[data-act="multiplayer"]', 700)
+            await tap('[data-act="mpTab"][data-tab="campaign"]', 600)
+            await tap('[data-act="cpOp"][data-o="1"]', 500)
+            st = await ev("({ n: document.querySelectorAll('.cpm-st').length, head: document.querySelector('.cpm-head b')?.textContent, on: document.querySelector('.cpm-st.on')?.dataset.k, locked: document.querySelectorAll('.cpm-st.locked').length })")
+            check('Starfall: its own route map of four, its first mission not cleared picked', st['n'] == 4 and 'Starfall' in (st['head'] or '') and st['on'] == '11' and st['locked'] == 0, st)
+            await shot('20-starfall-tab')
+            await fit(['.cpm-st', '.cpm-side', '.cpm-go', '.cpm-ops'], 'starfall tab')
+            await tap('[data-act="cpPick"][data-k="8"]', 400)
+            await tap('[data-act="cpBrief"]', 500)
+            brief = await ev("document.querySelector('.cpb-title')?.textContent ?? ''")
+            check('  the briefing names the operation and the night defence', 'Operation Starfall' in brief and 'Dark Sky' in brief, brief)
+            await shot('21-starfall-brief')
+            await tap('[data-act="cpSolo"]', 300)
+            ok = await until(f"{G}.inMatch && {R}?.state === 1 && {R}.night", 40)
+            check('Dark Sky: a night mission', ok)
+            await ev(f"for (const p of {G}.match.sim.players) if (p.bot && p.team === 0) p.bot.update = () => [];")
+            await pg.wait_for_timeout(2500)
+            dark = await ev(f"!!{G}.renderer.cpFx?.dark?.visible && {G}.renderer.cpFx.darkK > 0.5")
+            check('  the dark round the player', dark, await ev(f"{G}.renderer.cpFx?.darkK"))
+            await shot('22-night')
+            await ev(f"{R}._flare()")
+            await pg.wait_for_timeout(1800)
+            lit = await ev(f"{G}.renderer.cpFx?.darkK < 0.4")
+            check('  a flare lifts it', lit, await ev(f"{G}.renderer.cpFx?.darkK"))
+            await shot('23-flare')
+            await ev(f"(() => {{ const R = {R}; R.state = 3; R.stateT = 99; }})()")
+            await until("document.querySelector('.menu')?.dataset.screen === 'results'", 40, 250)
+            await pg.goto(f'http://localhost:{PORT}/?debug=1')
+            await pg.wait_for_timeout(1500)
+            await tap('[data-act="multiplayer"]', 700)
+            await tap('[data-act="mpTab"][data-tab="campaign"]', 600)
+            await tap('[data-act="cpPick"][data-k="11"]', 300)
+            await tap('[data-act="cpBrief"]', 500)
+            await tap('[data-act="cpSolo"]', 300)
+            ok = await until(f"{G}.inMatch && {R}?.state === 1", 40)
+            for _ in range(4):
+                if await ev(f"{R}.cur?.type") == 'boss': break
+                await ev(f"{R}._complete()")
+                await pg.wait_for_timeout(300)
+            ok = await until(f"!!{R}.boss", 10)
+            check('Zero Hour: Director Vane on the field, the launch clock running', ok and await ev(f"{R}.timer > 300"))
+            await ev(f"(() => {{ const m = {G}.match, R = m.sim.rules, b = R.boss.p, me = m.sim.byId.get('local'); m.sim._placeAt(me, {{ x: b.ps.x - 14, z: b.ps.z }}, 0); R.boss.n = 1; R.boss.atk = 0.2; }})()")
+            ok = await until(f"{R}.hazards.filter(h => h.k === 0).length >= 3", 10, 100)
+            check('  his salvo: a line of rings', ok)
+            await pg.wait_for_timeout(500)
+            info = await ev(f"(() => {{ const fx = {G}.renderer.cpFx; return {{ crest: fx?.crest?.material.color.getHex(), bar: document.querySelector('.cp-boss b')?.textContent, timer: !document.querySelector('.cp-timer').hidden && document.querySelector('.cp-timer small')?.textContent }}; }})()")
+            check('  his bar, his crest and the launch clock', 'Vane' in (info['bar'] or '') and info['crest'] == 0x9ad8ff and info['timer'] == 'To launch', info)
+            await shot('24-vane-salvo')
+            await fit(['.cp-top', '.cp-card', '.cp-boss'], 'vane')
+
             print('With friends: a co-op room')
             await pg.goto(f'http://localhost:{PORT}/?debug=1&net=local')
             await pg.wait_for_timeout(1500)
             await tap('[data-act="multiplayer"]', 700)
             await tap('[data-act="mpTab"][data-tab="campaign"]', 600)
+            await tap('[data-act="cpOp"][data-o="0"]', 400)
             await tap('[data-act="cpPick"][data-k="2"]', 300)
             await tap('[data-act="cpFriends"]', 1200)
             lob = await ev("({ screen: window.__game.menu.el.dataset.screen, custom: window.__game.app.lobby?.custom, chip: document.querySelector('.cu-chip')?.textContent.trim(), trains: document.querySelectorAll('.train').length, seats: document.querySelectorAll('.train .car').length })")

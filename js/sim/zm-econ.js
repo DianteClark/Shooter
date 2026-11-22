@@ -568,6 +568,12 @@ export class ZmEcon {
   // The quest's boss: the Gravewarden, the Listener on a radio quest, the Barker on the lanterns (ZM_QUEST_BOSS).
   get bossKind() { return zmQuestBoss(this.L).kind; }
   // A bot's step out of the Barker's marked lane (js/sim/zm-kinds.js dodge).
+  // Saltmere Abbey: the first font drinking (open), whose call brings a share of the round's risers near it.
+  fontCall() {
+    const q = this.quest;
+    if (!q.woke || q.state) return null;
+    return this.L.relics.find(r => q.woke & (1 << r.i) && !(q.got & (1 << r.i)) && bandOpen(this.L, this.R.open, r.band)) ?? null;
+  }
   laneDodge(ps) { return this.quest.charge ? laneDodge(this, ps) : this.quest.dive ? diveDodge(this, ps) : null; }
 
   // A radio locking on: its tuner has to stay by it (up, in reach) for ZE.quest.tune s, or it is lost.

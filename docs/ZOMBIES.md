@@ -701,10 +701,12 @@ area. The boss rounds' Yardmaster and the quest's Ferryman rise in the Nave when
 **The quest: the fonts** (`map.zm.quest = { kind: 'font', bell, fonts }`; graphLayout puts the fonts and the bell in the
 relics' and the altar's slots and sets `L.questKind = 'font'`; the host side is js/sim/zm-abbey.js). Different from the
 other three: the crew's own kills are the steps. A font is dry until the power runs the pumps ("DRY FONT, No power: the
-pumps are still"); FILL THE FONT (free) wakes it, and every zombie killed within `ZE.quest.fontR` = 6.5 m of a woken
-font is a soul in it (`zsoul`: a pale streak from the kill to the bowl), `ZE.quest.souls` = 12 fill it. A woken font
-left `ZE.quest.thirst` = 25 s without a kill loses a soul every `ZE.quest.drain` = 4 s ("The font is thirsty"). The
-round plate counts "Fonts n/3 · souls/12" while one drinks. Three full, TOLL THE BELL on the tower's west face.
+pumps are still"); FILL THE FONT (free) wakes it, and every zombie killed within `ZE.quest.fontR` = 7 m of a woken
+font is a soul in it (`zsoul`: a pale streak from the kill to the bowl), `ZE.quest.souls` = 10 fill it. While one
+drinks it **calls the drowned**: `ZE.quest.call` = 35% of the round's risers come up within 20 m of it (`ZmEcon.fontCall`,
+read by `ZmRules._riser`), so the fight comes to the dead end it stands in. A woken font left `ZE.quest.thirst` = 30 s
+of a round (not the break) without a kill loses a soul every `ZE.quest.drain` = 5 s ("The font is thirsty"). The round
+plate counts "Fonts n/3 · souls/10" while one drinks. Three full, TOLL THE BELL on the tower's west face.
 
 **The Ferryman** answers (`ZK.ferryman` = 12, view zk 13; its body in js/render/zm-models.js, see "Bodies"; the old
 operator-kit look is slot 12 of js/render/zm-looks.js): 50x a round's health (+10% per crew seat), slow, a long reach, and
@@ -737,7 +739,11 @@ shared vfx (no new draw calls).
 
 **Pacing and difficulty**: the same rounds, mix and late escalation as the others (`ZM_LATE`), so a good run should end
 in the same rounds 16-20 band; the quest asks a crew to fight in a dead end three times (the fonts), the Ferryman's dive
-punishes standing still. A 300 s bot crew (dev/map-validate.mjs saltmere): round 7, power on.
+punishes standing still. A 300 s bot crew (dev/map-validate.mjs saltmere): round 7, power on. Ally runs
+(`dev/sim-zm-allies.mjs --maps=saltmere --runs=3`, the human-like stand-in and three allies): rounds 10, 10, 10 (Wrenfield
+8, 12, 10 on the same seeds), a font filled in every run and three filled to the brim (the stand-in falls to the
+round-10 boss on every map, as before). Before the font's call and the break without thirst: rounds 11, 11, 10 and one
+font full in three runs.
 
 **Tests**: `node dev/map-validate.mjs saltmere`; the `saltmere` section of dev/sim-zombies.mjs (layout, loop, dead ends;
 the fonts dry without the power, filled, a kill beside one feeds it and one away does not, thirst, full at its count, the

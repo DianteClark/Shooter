@@ -261,8 +261,9 @@ export const ZE = {
   // tune: seconds a radio takes to lock on (Polestar Relay's quest); burn: seconds the lanterns burn from the first one
   // lit (Wrenfield Fair's: all four in order before then, or they all go out); wrong: runners a wrong lantern calls up.
   // Saltmere Abbey's fonts: a filled font drinks the drowned killed within `fontR` m of it until it holds `souls`; one
-  // left `thirst` s without a kill loses a soul every `drain` s.
-  quest: { pts: 3000, tune: 5, burn: 75, wrong: 3, souls: 12, fontR: 6.5, thirst: 25, drain: 4 },
+  // left `thirst` s of a round without a kill loses a soul every `drain` s; while one drinks it calls a `call` share
+  // of the round's risers to within 20 m of it.
+  quest: { pts: 3000, tune: 5, burn: 75, wrong: 3, souls: 10, fontR: 7, thirst: 30, drain: 5, call: 0.35 },
 };
 export const ZM_TRAP_KINDS = ['shock', 'vent', 'blade'];
 export const ZM_TRAP_NAMES = { shock: 'Live Rail', vent: 'Firedamp Vents', blade: 'Threshers' };

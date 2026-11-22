@@ -55,6 +55,9 @@ export function campaignTabMarkup({ k, diff, cp }) {
 
 // The picked mission's plate, and the station marks.
 export function paintCampaignTab(root, { k, diff, cp }) {
+  // Another operation's mission picked: its own map, stations and note (the whole tab body again).
+  const box = root.querySelector('.mp-cpg');
+  if (box && !box.querySelector(`.cpm-o${opIndex(k)}`)) box.innerHTML = campaignTabMarkup({ k, diff, cp });
   const m = MISSIONS[k], open = missionOpen(cp, k), rec = cp[m.id] ?? [0, 0, 0];
   for (const b of root.querySelectorAll('.cpm-st')) b.classList.toggle('on', Number(b.dataset.k) === k);
   const side = root.querySelector('.cpm-side');

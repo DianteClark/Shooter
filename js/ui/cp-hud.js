@@ -58,6 +58,7 @@ const CSS = `
   background: var(--hud-glass, rgba(16,20,26,.78)); clip-path: polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px); }
 .cp-boss b { font: 400 13px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: #ff7a5a; }
 .cp-boss b span { color: var(--c-haze); font-size: 11px; margin-left: 6px; }
+.cp-boss b em { font-style: normal; }
 .cp-boss > i { display: block; height: 6px; margin-top: 4px; background: rgba(231,234,228,.15); position: relative; overflow: hidden; }
 .cp-boss > i i { position: absolute; inset: 0; background: linear-gradient(90deg, #ff4a2a, #ffb21a); transform-origin: left; transform: scaleX(var(--k, 1)); }
 .cp-boss > i u { position: absolute; top: 0; bottom: 0; width: 2px; background: rgba(10,13,17,.9); }
@@ -130,7 +131,7 @@ export class CpHud {
         <div class="cp-chip cp-hide" hidden><b>HIDDEN</b><small>Stealth</small></div>
       </div>
       <div class="cp-card"><span class="ci">${icon('mode:cp', { size: 16 })}</span><b></b><small></small><em></em><div class="cpbar"><i></i></div></div>
-      <div class="cp-boss" hidden><b>Marshal Kordell<span></span></b><i><i></i><u style="left:66%"></u><u style="left:33%"></u></i></div>
+      <div class="cp-boss" hidden><b><em class="cp-bn">Marshal Kordell</em><span></span></b><i><i></i><u style="left:66%"></u><u style="left:33%"></u></i></div>
       <div class="cp-rev" hidden><b>Reviving</b><i><i></i></i></div>
       <div class="cp-radio" hidden><b></b><span></span></div>
       <div class="cp-eye" hidden><b>SEEN</b><i><i></i></i></div>
@@ -148,7 +149,7 @@ export class CpHud {
     this.timerChip = $('.cp-timer'); this.timerEl = $('.cp-timer b'); this.timerS = $('.cp-timer small');
     this.hideChip = $('.cp-hide'); this.hideEl = $('.cp-hide b');
     this.card = $('.cp-card'); this.cardB = $('.cp-card b'); this.cardS = $('.cp-card small'); this.cardE = $('.cp-card em'); this.cardBar = $('.cp-card .cpbar i');
-    this.bossEl = $('.cp-boss'); this.bossBar = $('.cp-boss > i > i'); this.bossS = $('.cp-boss b span');
+    this.bossEl = $('.cp-boss'); this.bossBar = $('.cp-boss > i > i'); this.bossS = $('.cp-boss b span'); this.bossN = $('.cp-boss .cp-bn');
     this.radioEl = $('.cp-radio'); this.radioWho = $('.cp-radio b'); this.radioText = $('.cp-radio span');
     this.eyeEl = $('.cp-eye'); this.eyeBar = $('.cp-eye i i');
     this.tags = [...el.querySelectorAll('.cp-tag')].map(root => ({ root, span: root.querySelector('span'), html: '', x: NaN, y: NaN, cls: '' }));
@@ -175,6 +176,8 @@ export class CpHud {
     this.c = {}; this.base = null; this.queue = []; this.radioT = 0; this.say = null; this.introShown = false;
     this.failEl.hidden = true; this.radioEl.hidden = true;
     this.misEl.textContent = String(mission.n);
+    // The boss's name: the mission's own (Operation Starfall's Director Vane), else Kordell.
+    this.bossN.textContent = mission.boss?.name ?? 'Marshal Kordell';
     this.misS.textContent = `Mission · ${CP_DIFFS[diff].name}`;
   }
 
