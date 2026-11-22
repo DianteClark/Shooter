@@ -32,7 +32,7 @@ export const MP_TABS = [
 export const MP_TAB_IDS = MP_TABS.filter(t => !t.soon).map(t => t.id);
 
 const STANDARD_MODES = ['tdm', 'dom', 'kc', 'hard', 'hq', 'snd', 'ctf', 'ffa', 'ko', 'ctl', 'grind', 'gun', 'inf', 'oic', 'gf'];
-const GROUND_WAR_MODES = ['gwtdm', 'gwdom', 'gwhq', 'gwko', 'gwinf'];
+const GROUND_WAR_MODES = ['gwtdm', 'gwdom', 'cq', 'bt', 'gwhq', 'gwko', 'gwinf'];
 const short = ids => ids.map(id => MODES[id].short).join(', ');
 
 const PLAYLISTS = {
@@ -45,6 +45,9 @@ const PLAYLISTS = {
   ],
   groundwar: [
     { id: 'gwqp', name: 'Quick Play: Ground War', icon: 'quick', modes: GROUND_WAR_MODES },
+    // Conquest and Breakthrough (ROADMAP 65): also on parts of the battle royale islands (tabMaps).
+    { id: 'conquest', name: 'Conquest', icon: 'mode:cq', modes: ['cq'], sub: 'Flags and tickets · spawn on any flag you hold' },
+    { id: 'breakthrough', name: 'Breakthrough', icon: 'mode:bt', modes: ['bt'], sub: 'Attack or defend, sector by sector' },
     { id: 'gwparty', name: 'Ground War Party', icon: 'party', modes: ['gwinf', 'gwko'] },
   ],
   br: [
@@ -127,7 +130,8 @@ export function resolveSelection(tab, sel, { hardcore = false } = {}) {
 function tabMaps(tab, ranked = false) {
   const open = id => !dateLocked('map', id);         // A season's date-locked map waits for its season.
   if (ranked) return MAP_IDS.filter(id => tierOf(id) === RANKED_RULES.size && !MAPS[id].devMap && open(id));
-  if (tab === 'groundwar') return MAP_IDS.filter(id => tierOf(id) === 'huge' && open(id));
+  // Ground War: the huge maps, and the battle royale islands for the modes that play a part of one (Conquest, Breakthrough).
+  if (tab === 'groundwar') return [...MAP_IDS.filter(id => tierOf(id) === 'huge'), ...BR_PICK.filter(id => !MAPS[id].devMap)].filter(open);
   if (tab === 'br' || tab === 'extraction') return BR_PICK.filter(id => !MAPS[id].devMap && open(id));
   if (tab === 'zombies') return (MODES.zm.maps ?? []).filter(id => MAPS[id] && open(id));
   return MAP_IDS.filter(id => tierOf(id) !== 'huge' && open(id));

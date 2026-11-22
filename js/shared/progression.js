@@ -900,7 +900,7 @@ const BANG_KILL_SECS = 0.4;      // A Drill or Impact kill this soon after its b
 const STREAK_MULTI_GAP = 1.5;
 const LONG_THROW = 12;
 const BANK_WINDOW = 3.5;         // A frag kill this soon after a banked throw is the banked frag's.
-const OBJ_MEDALS = new Set(['capture', 'confirm', 'plant', 'defuse', 'flag_capture', 'flag_return', 'hq_capture', 'ctl_capture']);
+const OBJ_MEDALS = new Set(['capture', 'confirm', 'plant', 'defuse', 'flag_capture', 'flag_return', 'hq_capture', 'ctl_capture', 'cq_capture', 'bt_capture']);
 
 // Counts one match for the mastery tracks and the weapon ladder. Pure, like ProTracker: feed onEvents(events, view)
 // every frame; setLoadout(loadout) at each spawn (the operator in use); finish({won}) once. gains() is
@@ -2185,7 +2185,7 @@ export class ChallengeTally {
           if (MULTI_MEDALS.has(e.medal)) this.add('multi');
           else if (e.medal === 'streak3' || e.medal === 'streak5') this.add(e.medal);
           // "Flags or zones": Headquarters and Control zones too (their own medals), as the labels promise.
-          else if (e.medal === 'capture' || e.medal === 'hq_capture' || e.medal === 'ctl_capture') this.add('captures');
+          else if (e.medal === 'capture' || e.medal === 'hq_capture' || e.medal === 'ctl_capture' || e.medal === 'cq_capture' || e.medal === 'bt_capture') this.add('captures');
           else if (e.medal === 'confirm') this.add('confirms');
           else if (e.medal === 'plant' || e.medal === 'defuse') { this.add(`${e.medal}s`); this.add('bombs'); }
           else if (e.medal === 'clutch') this.add('clutches');

@@ -21,6 +21,8 @@
 //   seatCode(p, code)       the per-guest record code for an AI seat (0: none; Graveyard Shift sends its horde itself)
 //   medal(p, medal)         false keeps a medal from being awarded
 //   event(e)                on a phone, an event from the host before the ones after it are applied (Showdown's round)
+//   respawn(p) / spawnAll() with ownSpawns   the rules place players themselves (Extraction, the campaign, Conquest)
+//   command(p, msg)         a phone's {cmd:'ex'|'zm'|'cp'|'bf', ...} (Conquest's deploy pick)
 import { HqRules } from './hq.js';
 import { KoRules } from './ko.js';
 import { InfRules } from './inf.js';
@@ -31,8 +33,10 @@ import { ExtractRules } from './extract.js';     // Extraction (docs/EXTRACT.md)
 import { ZmRules } from './zombies.js';         // Graveyard Shift (docs/ZOMBIES.md).
 import { GfRules } from './gf.js';             // Showdown, 2 v 2 rounds (docs/MODES.md).
 import { CampaignRules } from './campaign.js';  // The co-op campaign (docs/CAMPAIGN.md).
+import { ConquestRules } from './conquest.js';     // Conquest (ROADMAP 65, docs/MODES.md "Conquest and Breakthrough").
+import { BreakthroughRules } from './breakthrough.js';   // Breakthrough (the same).
 
-export const MODE_RULES = { hq: HqRules, ko: KoRules, inf: InfRules, oic: OicRules, ctl: CtlRules, grind: GrindRules, ex: ExtractRules, zm: ZmRules, gf: GfRules, cp: CampaignRules };
+export const MODE_RULES = { hq: HqRules, ko: KoRules, inf: InfRules, oic: OicRules, ctl: CtlRules, grind: GrindRules, ex: ExtractRules, zm: ZmRules, gf: GfRules, cp: CampaignRules, cq: ConquestRules, bt: BreakthroughRules };
 
 // The mode state on any view: the sim's and decoded views carry it as `view.obj`; an interpolated view (js/game/interp.js
 // copies a fixed list of fields) still has it on the point list it does copy.

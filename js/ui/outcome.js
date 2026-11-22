@@ -108,6 +108,18 @@ export function matchHeader(data) {
     const m = score.mine, t = score.them;
     const rd = n => `${n} round${n === 1 ? '' : 's'}`;
     line = outcome === 'win' ? `Won ${rd(m)} to ${t}` : outcome === 'loss' ? `Lost ${rd(m)} to ${t}` : `Level at ${rd(m)} each`;
+  } else if (rules === 'cq') {
+    // Conquest: the tickets each side has left; how it ended in the line.
+    const t = data.bfView?.tickets ?? scores ?? [0, 0], mine = t[myTeam] ?? 0, them = t[1 - myTeam] ?? 0;
+    line = outcome === 'win' ? (them <= 0 ? 'Their tickets ran out' : 'More tickets at the clock') : outcome === 'loss' ? (mine <= 0 ? 'Your tickets ran out' : 'Fewer tickets at the clock') : 'Level on tickets at the clock';
+    score = { kind: 'pair', mine, them, mineCss: TEAMS[myTeam]?.css, themCss: TEAMS[1 - myTeam]?.css };
+  } else if (rules === 'bt') {
+    // Breakthrough: the score is sectors (taken for the attackers, still standing for the defenders).
+    const b = data.bfView, att = b?.att ?? null, n = b?.sectors ?? (score.mine + score.them), taken = att === null ? null : scores?.[att] ?? b.sector;
+    const attacking = att === myTeam;
+    if (att === null) line = outcome === 'win' ? 'The line is yours' : 'The line is lost';
+    else if (attacking) line = outcome === 'win' ? `Broke through all ${n} sectors` : b?.reason === 'time' ? `Out of time at sector ${taken + 1} of ${n}` : `Out of tickets at sector ${taken + 1} of ${n}`;
+    else line = outcome === 'win' ? (taken ? `Held at sector ${taken + 1} of ${n}` : `Held the first line`) : `All ${n} sectors fell`;
   } else if (rules === 'ctf') {
     const caps = `${plural(score.mine, 'capture')} to ${score.them}`;
     line = outcome === 'win' ? `Won ${caps}` : outcome === 'loss' ? `Lost ${caps}` : `Level at ${caps}`;

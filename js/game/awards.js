@@ -239,7 +239,8 @@ export class MatchAwards {
       .sort((a, b) => b.kills - a.kills || b.secs - a.secs)
       .slice(0, HISTORY_GUNS);
     const objective = (this.medals.capture ?? 0) + (this.medals.confirm ?? 0) + (this.medals.flag_capture ?? 0) + (this.medals.flag_return ?? 0)
-      + (this.medals.hq_capture ?? 0) + (this.medals.hq_destroy ?? 0) + (this.medals.vip_kill ?? 0) + (this.medals.ctl_capture ?? 0) + (this.medals.grind_bank ?? 0);
+      + (this.medals.hq_capture ?? 0) + (this.medals.hq_destroy ?? 0) + (this.medals.vip_kill ?? 0) + (this.medals.ctl_capture ?? 0) + (this.medals.grind_bank ?? 0)
+      + (this.medals.cq_capture ?? 0) + (this.medals.cq_neutral ?? 0) + (this.medals.bt_capture ?? 0) + (this.medals.bt_sector ?? 0);
     const players = (view?.players ?? []).filter(p => !p.dummy);
     const team = me?.team ?? this.team ?? 0;
     // Team modes: ours and theirs. A free-for-all: mine and the best other score.
