@@ -117,7 +117,7 @@ export function mpMarkup({ tab, cpPick = null }) {
       <section class="mp-sec mp-sec-modes">
         ${sectionHead('mode:dom', 'Modes', 'Tick one or more')}
         <div class="mp-modes">${modes.map(id => `
-          <button class="mp-mode" data-act="mpMode" data-id="${id}" data-in="up">${ico(id)}<b>${esc(MODES[id].name.replace('Ground War ', 'GW ')).replace('Headquarters', 'Head&shy;quarters')}</b><i class="mp-tick">${ico('check')}</i></button>`).join('')}
+          <button class="mp-mode" data-act="mpMode" data-id="${id}" data-in="up">${ico(id)}<b>${esc(MODES[id].name.replace('Ground War ', 'GW ')).replace('Headquarters', 'Head&shy;quarters').replace('Breakthrough', 'Break&shy;through')}</b><i class="mp-tick">${ico('check')}</i></button>`).join('')}
         </div>
       </section>` : '');
   return `

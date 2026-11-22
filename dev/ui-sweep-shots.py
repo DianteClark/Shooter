@@ -8,7 +8,9 @@ clip, founds a clan. Then at 640x360, 852x393 and 932x430 it opens: the tourname
 Clans, History, a match's detail, History > Clips, the replay player on that clip, and the unlock sheets of the six new
 operators, a signature emote, a Season 2 skin and an event card. On each it runs dev/ui-overflow-test.py's text check
 (spill past its plate or the screen, glyphs cut without an ellipsis) and saves a screenshot to outdir. Fails on any
-spill, cut or console error.
+spill, cut or console error. The 1122 wave's screens (bug sweep 2026-11-22) follow at each size: the four new BR
+islands in Custom and on vote cards, the Campaign's Starfall line and finale briefing, Loadouts with Overkill, and the
+new guns', operators', Overkill's and streaks' unlock sheets.
 """
 import asyncio, subprocess, sys, time, os, json, ast
 from playwright.async_api import async_playwright
@@ -18,7 +20,7 @@ PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8396
 OUT = sys.argv[2] if len(sys.argv) > 2 else '/tmp/sweep-shots'
 ARGS = ['--use-angle=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist', '--enable-unsafe-swiftshader',
         '--disable-background-timer-throttling', '--disable-renderer-backgrounding']
-SIZES = [(640, 360), (852, 393), (932, 430)]
+SIZES = [(640, 360), (667, 375), (852, 393), (932, 430)]
 CHECK = next(n.value.value for n in ast.parse(open(os.path.join(ROOT, 'dev', 'ui-overflow-test.py')).read()).body
              if isinstance(n, ast.Assign) and getattr(n.targets[0], 'id', '') == 'CHECK')
 FAKE = """(() => { const Real = Date, offset = new Real('2026-11-21T12:00:00').getTime() - Real.now();
@@ -107,7 +109,7 @@ async def main():
                 await pg.screenshot(path=f'{OUT}/{name}-{w}x{h}.png')
                 r = await ev(CHECK)
                 seen += 1
-                bad = [f"spill {s['where']} \"{s['text']}\" past {s['past']}" for s in r['spill']] + [f"cut {c['where']} \"{c['text']}\" by {c['by']}px" for c in r['cut']]
+                bad = [f"spill {s['where']} \"{s['text']}\" past {s['past']}" for s in r['spill']] + [f"cut {c['where']} \"{c['text']}\" by {c['by']}px" for c in r['cut']] + [f"broken word {b['where']} \"{b['text']}\"" for b in r['broken']]
                 print(f"  {'ok  ' if not bad else 'FAIL'} {name}@{w}x{h}" + (f" ({r['clipped']} graceful)" if r['clipped'] else '') + (f": {bad[:6]}" if bad else ''), flush=True)
                 for b in bad: fails.append(f'{name}@{w}x{h}: {b}')
 
@@ -144,6 +146,36 @@ async def main():
                 await pg.wait_for_timeout(600)
                 await title()
                 for kind, id in [('operator', o) for o in ['skylark', 'gambit', 'corvid', 'linnet', 'garrison', 'brigid']] + [('emote', 'podium'), ('card', 'ev-gloves')]:
+                    try:
+                        await ev(SHEET, [kind, id])
+                    except Exception as e:
+                        fails.append(f'unlock sheet {kind} {id}: {e}'); continue
+                    await measure(f'unlock-{kind}-{id}', w, h)
+                    await ev(f"{G}.menu.overlay('')")
+                # 1122 wave (bug sweep 2026-11-22): the four new battle royale islands in Custom's picker and on vote
+                # cards (with Conquest and Breakthrough on Meridian), the Campaign tab's Starfall line and its finale's
+                # briefing, Loadouts with Overkill (a sniper in the second slot) and the new streaks, and the unlock
+                # sheets of the new guns, operators, Overkill and the three new streaks.
+                for island in ('meridian', 'sirocco', 'kittiwake', 'kaldvik'):
+                    await ev(f"{G}.menu.custom({{ tab: 'match', pick: {{ mapId: '{island}', mode: 'br' }} }})")
+                    await measure(f'custom-br-{island}', w, h)
+                for i, opts in enumerate([[('meridian', 'br'), ('sirocco', 'br'), ('kittiwake', 'br')], [('kaldvik', 'br'), ('meridian', 'cq'), ('meridian', 'bt')]]):
+                    o = json.dumps([{'mapId': m, 'mode': md} for m, md in opts])
+                    await ev(f"{G}.menu.vote({{ key: {9 + i}, options: {o}, left: 20, seconds: 15, winner: null, resolved: null, mine: 1, counts: [9, 12, 4], total: 32, lobby: {{ name: 'Quick Play', size: 32 }} }})")
+                    await measure(f'vote-islands-{i + 1}', w, h)
+                await title()
+                await tap('[data-act="multiplayer"]', 800)
+                await tap('[data-act="mpTab"][data-tab="campaign"]', 800)
+                await tap('[data-act="cpOp"][data-o="1"]', 800)
+                await measure('campaign-starfall', w, h)
+                await ev(f"{G}.menu.campaignBrief({{ k: 11, diff: 2 }})")
+                await measure('campaign-brief-finale', w, h)
+                await title()
+                await ev(f"{G}.Progress.updateLoadout({G}.Progress.activeLoadout, {{ primary: 'ar', secondary: 'autosniper', perks: ['doubletime', 'overkill', 'highalert'], streaks: ['sam', 'napalm', 'vtol'] }})")
+                await ev(f"{G}.menu.loadouts({{ onBack() {{}}, onChange() {{}}, onGunsmith() {{}}, onOperators() {{}}, onRename() {{}} }})")
+                await measure('loadouts-overkill', w, h)
+                await title()
+                for kind, id in [('operator', o) for o in ['juniper', 'fenwick', 'odessa', 'calder']] + [('weapon', g) for g in ['hipsmg', 'panlmg', 'autosniper', 'flare', 'lockon']] + [('perk', 'overkill')] + [('streak', k) for k in ['vtol', 'napalm', 'sam']]:
                     try:
                         await ev(SHEET, [kind, id])
                     except Exception as e:

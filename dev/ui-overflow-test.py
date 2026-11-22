@@ -2,7 +2,7 @@
 """Overflow checker: no text may spill out of its box or be cut mid-glyph, on any menu screen.
 
 Run from anywhere: python3 dev/ui-overflow-test.py [port] [--sizes 667x375,852x393] [--only menus|gunsmith] [--shots DIR]
-[--verbose] (lists every graceful truncation too)
+[--verbose] (lists every graceful truncation too) [--scenes a,b] (only these menu scenes)
 It serves the repo itself and loads every menu scene of dev/ui-gallery.html (real modules, fake in-memory saves, fresh
 and veteran) at each size, then walks the gunsmith: the classes and guns of every class, and the bench of a spread of
 guns on every tab and attachment slot. On each state it measures every visible text run in the page:
@@ -12,6 +12,8 @@ guns on every tab and attachment slot. On each state it measures every visible t
            its cross axis, since the rest is a scroll away
   cut      an element that clips (overflow hidden/clip) holds more text than it shows, without an ellipsis or a line
            clamp, so a glyph is sliced in half
+  broken   a word wraps mid-word onto the next line with no hyphen (a box narrower than its longest word; a soft
+           hyphen or a dash is a deliberate break point)
 
 Truncation with an ellipsis or a line clamp is allowed (names may truncate gracefully) and is listed as a count only.
 Fails (exit 1) on any spill, cut or console error. Ports 8321-8329 are the project's; the default is 8328.
@@ -28,6 +30,7 @@ SIZES = [tuple(map(int, s.split('x'))) for s in opt('--sizes', '667x375,852x393'
 ONLY = opt('--only', '')
 SHOTS = opt('--shots', '')
 VERBOSE = '--verbose' in args
+PICK = [x for x in opt('--scenes', '').split(',') if x]     # Only these menu scenes (a rerun after a fix).
 SIZE_ID = {(667, 375): 'se', (812, 375): 'mini', (844, 390): 'p13', (852, 393): 'p15', (874, 402): 'p16p', (926, 428): 'plus', (932, 430): 'p16pl', (956, 440): 'pm'}
 GL = ['--use-angle=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist', '--enable-unsafe-swiftshader']
 
@@ -49,7 +52,7 @@ GUNS = ['ar', 'lmg', 'dmr', 'rampar', 'semisnipe', 'lever', 'scatter', 'thumper'
 
 CHECK = r"""
 (() => {
-  const TOL = 1.5, out = { spill: [], cut: [], clipped: 0, trunc: [] };
+  const TOL = 1.5, out = { spill: [], cut: [], broken: [], clipped: 0, trunc: [] };
   const vw = innerWidth, vh = innerHeight;
   const isScroller = el => el.matches('.scroll-y, .scroll-x') || ['auto', 'scroll'].includes(getComputedStyle(el).overflowY) || ['auto', 'scroll'].includes(getComputedStyle(el).overflowX);
   const name = el => {
@@ -76,6 +79,18 @@ CHECK = r"""
     if (!rects.length || hidden(el)) continue;
     let r = rects.reduce((a, b) => ({ left: Math.min(a.left, b.left), top: Math.min(a.top, b.top), right: Math.max(a.right, b.right), bottom: Math.max(a.bottom, b.bottom) }));
     const text = n.data.trim().slice(0, 40);
+    // A word broken across two lines with no hyphen ("BREAKTHRO / UGH"): a box too narrow for its longest word. Words
+    // with a soft hyphen or a dash break there on purpose; a run that is truncated anyway is judged by its clip below.
+    const brokenHere = [];
+    if (rects.length > 1) {
+      for (const mw of n.data.matchAll(/[^\s\u00ad\-\u2010-\u2014\/]{4,}/g)) {
+        // Its first and last letters on different lines (a range that starts at a line break also reports a sliver
+        // at the end of the line before, so whole-word rects would mislead).
+        const top = i => { const cr = document.createRange(); cr.setStart(n, i); cr.setEnd(n, i + 1); const q = [...cr.getClientRects()].sort((a, b) => b.width - a.width)[0]; return q ? q.top + q.height / 2 : null; };
+        const a = top(mw.index), b = top(mw.index + mw[0].length - 1);
+        if (a !== null && b !== null && Math.abs(a - b) > 4) { const key = 'broken|' + path(el) + '|' + mw[0]; if (!seen.has(key)) { seen.add(key); brokenHere.push({ where: path(el), text: mw[0] }); } }
+      }
+    }
     // Own clipping: more text than the box shows, without an ellipsis or a clamp.
     for (let e = el; e && e !== document.body; e = e.parentElement) {
       const cs = getComputedStyle(e);
@@ -86,7 +101,7 @@ CHECK = r"""
       const graceful = cs.textOverflow === 'ellipsis' || cs.webkitLineClamp !== 'none' && cs.webkitLineClamp !== '' && cs.webkitLineClamp !== undefined;
       const overX = e.scrollWidth > e.clientWidth + 1, overY = e.scrollHeight > e.clientHeight + 1;
       // Truncated with an ellipsis or a clamp: what shows is the clipping box, so that box is what must fit.
-      if (graceful && (overX || overY)) { out.clipped++; out.trunc.push(path(el) + ' "' + text + '"'); r = e.getBoundingClientRect(); break; }
+      if (graceful && (overX || overY)) { brokenHere.length = 0; out.clipped++; out.trunc.push(path(el) + ' "' + text + '"'); r = e.getBoundingClientRect(); break; }
       // Only the text's own glyphs count: is this run cut by this box?
       const b = e.getBoundingClientRect();
       if (r.right > b.right + TOL || r.left < b.left - TOL || r.bottom > b.bottom + TOL + 2 || r.top < b.top - TOL - 2) {
@@ -95,6 +110,7 @@ CHECK = r"""
       }
       break;
     }
+    out.broken.push(...brokenHere);      // Not when truncated with an ellipsis or a clamp: that is judged as truncation.
     // Spill: past the plate it sits on, or the screen (a scroller's own axis excepted).
     // The Campaign map's station labels hang below their station button by design (absolutely placed, pointer-events
     // none): they are not held by the button, so only the screen edge counts for them.
@@ -240,16 +256,16 @@ async def main():
                     if VERBOSE:
                         for t in r['trunc']:
                             print(f'  trunc {vw}x{vh} {label}: {t}')
-                    for kind in ('spill', 'cut'):
+                    for kind in ('spill', 'cut', 'broken'):
                         for x in r[kind]:
-                            fails.append(f'{vw}x{vh} {label}: {kind} "{x["text"]}" in {x["where"]} (past {x.get("past") or x.get("box")}{", by " + str(x["by"]) + "px" if "by" in x else ""})')
+                            fails.append(f'{vw}x{vh} {label}: {kind} "{x["text"]}" in {x["where"]}' + (f' (past {x.get("past") or x.get("box")}{", by " + str(x["by"]) + "px" if "by" in x else ""})' if kind != 'broken' else ''))
                     if SHOTS:
                         os.makedirs(SHOTS, exist_ok=True)
                         await pg.screenshot(path=os.path.join(SHOTS, f'{vw}x{vh}-{label.replace(" ", "_").replace("/", "-")}.png'))
 
                 if not ONLY or ONLY == 'menus':
                     for save in ('fresh', 'veteran'):
-                        for scene in SCENES:
+                        for scene in [x for x in SCENES if not PICK or x in PICK]:
                             await load(scene, f'&save={save}', 4500 if scene.startswith('results') else None)
                             await check(f'{scene} ({save})')
                             if scene == 'results-gw':       # Every challenge row, scrolled into view.
