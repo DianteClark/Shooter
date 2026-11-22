@@ -23,9 +23,10 @@
 import { WEAPON_IDS } from '../shared/constants.js';
 import { WEAPONS } from '../shared/weapons.js';
 import { hasLineOfSight } from '../shared/geometry.js';
-import { ZM, ZE, ZK, ZM_KINDS, ZM_TRAP_KINDS, ZM_LISTENER, ZM_BARKER, NO_GUN, START_GUN, bandOpen, zmFxOf, zmTierCamo, zmUpgradable, zmWonderOf, supplyCost, roundMix, isBossKind, isQuestBoss, clawDmg,
+import { ZM, ZE, ZK, ZM_KINDS, ZM_TRAP_KINDS, ZM_LISTENER, ZM_BARKER, ZM_FERRY, NO_GUN, START_GUN, bandOpen, zmFxOf, zmTierCamo, zmUpgradable, zmWonderOf, supplyCost, roundMix, isBossKind, isQuestBoss, clawDmg,
   zmQuestBoss, lanternOrder } from '../shared/zombies.js';
 import { askOracle, lightLantern, stepLanterns, stepBarker, laneDodge, whirlHit, stepWhirls } from './zm-fair.js';     // Wrenfield Fair.
+import { fillFont, feedFonts, stepFonts, stepFerryman, diveDodge } from './zm-abbey.js';     // Saltmere Abbey.
 import { brArm } from './br.js';
 import { TACTICALS, LETHALS } from '../shared/catalog.js';
 
@@ -57,7 +58,9 @@ export class ZmEcon {
     this.exfil = { state: 0, timer: 0, by: -1, spawnT: 0 };
     this.quest = { got: 0, state: 0, respawnT: 0, callT: 0, tuneI: -1, tuneBy: -1, tuneT: 0, pulseT: 0, pulse: null,
       // Wrenfield Fair's lanterns: the Oracle asked, the burn left, the order (from the match seed); the Barker's charge.
-      read: 0, burnT: 0, order: lanternOrder(R.seed ?? 0, this.L.relics?.length || 4), charge: null, chargeT: ZM_BARKER.every };
+      read: 0, burnT: 0, order: lanternOrder(R.seed ?? 0, this.L.relics?.length || 4), charge: null, chargeT: ZM_BARKER.every,
+      // Saltmere Abbey's fonts: filled (woken) bits, souls drunk and time since the last, per font; the Ferryman's dive.
+      woke: 0, souls: (this.L.relics ?? []).map(() => 0), thirst: (this.L.relics ?? []).map(() => 0), dive: null, diveT: ZM_FERRY.every };
     this.whirls = [];         // The Whirligig's whirls spinning (host only: short-lived, drawn from their event).
     this._whirlT = new Map();
     this.wardenSeat = -1;
@@ -78,6 +81,7 @@ export class ZmEcon {
     if (this.exfilOn) this._stepExfil(dt);
     if (this.quest.tuneI >= 0) this._stepTune(dt);
     if (this.quest.burnT > 0) stepLanterns(this, dt);
+    if (this.quest.woke) stepFonts(this, dt);
     if (this.whirls.length) stepWhirls(this, dt);
     if (this.quest.state === 1) this._stepWarden(dt);
     // Bots wear their upgraded gun's look (a phone sets its own, js/game/match.js).
@@ -174,6 +178,7 @@ export class ZmEcon {
           return 0;
         }
         if (this.L.questKind === 'lantern') return lightLantern(this, p, u.i);
+        if (this.L.questKind === 'font') return fillFont(this, p, u.i);
         q.got |= 1 << u.i;
         const n = this.L.relics.filter(r => q.got & (1 << r.i)).length;
         sim._emit({ t: 'zrelic', i: u.i, by: p.id, n, of: this.L.relics.length });
@@ -184,6 +189,7 @@ export class ZmEcon {
         const q = this.quest;
         if (q.state || this.L.relics.some(r => !(q.got & (1 << r.i)))) return null;
         q.state = 1; q.respawnT = 0.5; q.callT = 8; q.pulseT = ZM_LISTENER.every; q.burnT = 0; q.charge = null; q.chargeT = ZM_BARKER.every;
+        q.woke = 0; q.dive = null; q.diveT = ZM_FERRY.every;
         sim._emit({ t: 'zwarden', state: 1, by: p.id, k: this.bossKind });
         return 0;
       }
@@ -562,7 +568,7 @@ export class ZmEcon {
   // The quest's boss: the Gravewarden, the Listener on a radio quest, the Barker on the lanterns (ZM_QUEST_BOSS).
   get bossKind() { return zmQuestBoss(this.L).kind; }
   // A bot's step out of the Barker's marked lane (js/sim/zm-kinds.js dodge).
-  laneDodge(ps) { return this.quest.charge ? laneDodge(this, ps) : null; }
+  laneDodge(ps) { return this.quest.charge ? laneDodge(this, ps) : this.quest.dive ? diveDodge(this, ps) : null; }
 
   // A radio locking on: its tuner has to stay by it (up, in reach) for ZE.quest.tune s, or it is lost.
   _stepTune(dt) {
@@ -586,6 +592,7 @@ export class ZmEcon {
     const w = this.wardenSeat >= 0 ? sim.players[this.wardenSeat] : null;
     if (w?.alive && w.zk === ZK.listener) { this._stepListener(w, dt); return; }
     if (w?.alive && w.zk === ZK.barker) { stepBarker(this, w, dt); return; }
+    if (w?.alive && w.zk === ZK.ferryman) { stepFerryman(this, w, dt); return; }
     if (w?.alive && w.zk === 4) {
       // It calls two runners up beside it every so often.
       q.callT -= dt;
@@ -656,6 +663,7 @@ export class ZmEcon {
   // A zombie down: the Gravewarden's end pays everyone.
   onKill(target, killer) {
     if (target.zFrozenT > this.sim.time) this._shatter(target, killer);
+    if (this.quest.woke) feedFonts(this, target);
     if (target.index !== this.wardenSeat || !isQuestBoss(target.zk)) return;
     this.wardenSeat = -1;
     this.quest.state = 2;
@@ -737,7 +745,8 @@ export class ZmEcon {
       this.traps.flatMap(t => [t.state, r1(t.timer)]),
       this.gear.flatMap(g => [GEAR_KINDS.indexOf(g.kind), r1(g.x), r1(g.z), ((Math.round(g.aim / (Math.PI * 2) * 64) % 64) + 64) % 64, r1(Math.max(0, g.life)), g.owner]),
       [this.exfil.state, r1(this.exfil.timer), this.exfil.by, this.R.crew.reduce((m, p, k) => m | (this.escaped?.includes(p.id) ? 1 << k : 0), 0)],
-      [this.quest.got, this.quest.state, this.quest.tuneI, r1(this.quest.tuneT), this.quest.tuneBy, this.quest.read, r1(this.quest.burnT), +this.quest.order.join('')], this.wardenSeat];
+      [this.quest.got, this.quest.state, this.quest.tuneI, r1(this.quest.tuneT), this.quest.tuneBy, this.quest.read, r1(this.quest.burnT), +this.quest.order.join(''),
+        this.quest.woke, this.quest.souls.slice()], this.wardenSeat];
   }
 
   decode(a) {
@@ -759,6 +768,9 @@ export class ZmEcon {
     if (q) {
       Object.assign(this.quest, { got: q[0], state: q[1], tuneI: q[2] ?? -1, tuneT: (q[3] ?? 0) / 10, tuneBy: q[4] ?? -1, read: q[5] ?? 0, burnT: (q[6] ?? 0) / 10 });
       if (q[7] !== undefined) this.quest.order = String(q[7]).padStart(this.quest.order.length, '0').split('').map(Number);
+      // Saltmere Abbey's fonts: which are filled and drinking, and the souls in each.
+      this.quest.woke = q[8] ?? 0;
+      if (Array.isArray(q[9])) this.quest.souls = q[9].slice();
     }
     this.wardenSeat = ws ?? -1;
   }
@@ -774,7 +786,8 @@ export class ZmEcon {
     Object.assign(this.exfil, old.exfil, { spawnT: 1 });
     Object.assign(this.quest, { got: old.quest.got, state: old.quest.state, respawnT: 0.5, callT: 8, pulseT: ZM_LISTENER.every, pulse: null,
       tuneI: old.quest.tuneI ?? -1, tuneBy: old.quest.tuneBy ?? -1, tuneT: old.quest.tuneT ?? 0,
-      read: old.quest.read ?? 0, burnT: old.quest.burnT ?? 0, order: old.quest.order ?? this.quest.order, charge: null, chargeT: ZM_BARKER.every });
+      read: old.quest.read ?? 0, burnT: old.quest.burnT ?? 0, order: old.quest.order ?? this.quest.order, charge: null, chargeT: ZM_BARKER.every,
+      woke: old.quest.woke ?? 0, souls: (old.quest.souls ?? this.quest.souls).slice(), thirst: this.quest.souls.map(() => 0), dive: null, diveT: ZM_FERRY.every });
     this.wardenSeat = old.wardenSeat;
   }
 
@@ -786,7 +799,7 @@ export class ZmEcon {
       gear: this.gear,
       exfil: { state: this.exfil.state, timer: this.exfil.timer, by: this.exfil.by },
       quest: { got: this.quest.got, state: this.quest.state, tuneI: this.quest.tuneI, tuneT: this.quest.tuneT, tuneBy: this.quest.tuneBy,
-        read: this.quest.read, burnT: this.quest.burnT, order: this.quest.order },
+        read: this.quest.read, burnT: this.quest.burnT, order: this.quest.order, woke: this.quest.woke, souls: this.quest.souls, dive: this.quest.dive },
       escaped: this.escaped,
     };
   }

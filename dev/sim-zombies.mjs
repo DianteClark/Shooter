@@ -37,6 +37,13 @@
 //                toward the nearest, held still while it shows, then run, hurting only those in it; bots step out of
 //                it; runners at its call, pays everyone, off the count); the quest and the Barker on a guest and
 //                through a migration; bots throw the power, ask the Oracle and light the lanterns in order
+//   saltmere     the fourth purpose-built map: seven areas in a loop, the Pump House off two sides, three dead ends,
+//                the economy on its spots; the font quest (dry without the power, filled it drinks the drowned killed
+//                beside it and not those away from it, a thirsty font loses souls, full at its count, the bell waits
+//                for three) and the Ferryman (rises up the Nave, its bar, the undertow: it dives for the nearest, is
+//                untouchable under the flood and comes up beneath them, hurting only those still in the ring; bots
+//                step out of it; the drowned at its call, pays everyone, off the count); the quest and the Ferryman
+//                on a guest and through a migration; bots throw the power, fill a font and hold by it
 //   wonders      the crate's wonder weapons: rolled about 8% of the time, never one held, never on a wall; in hand at
 //                their tier with their own def (host and phone), their own name, refused by the bench; the Stormcoil's
 //                bolt jumps through a crowd; the Rimecaster freezes in three hits, a frozen zombie stands still and
@@ -989,6 +996,217 @@ section('wrenfield');
   clearZmWalls(sim.map);
 }
 
+// ---- Saltmere Abbey: the fourth purpose-built map, the font quest and the Ferryman ----
+section('saltmere');
+{
+  const map = MAPS.saltmere, L = zmLayout(map);
+  const { syncZmDoors, reblockNav, ZE, ZM_FERRY } = await import('../js/shared/zombies.js');
+  const area = id => L.bands.findIndex(b => b.id === id);
+  ok(map.zmOnly && map.hidden && !MAP_IDS.includes('saltmere') && mapModes(map).join() === 'zm' && map.theme === 'saltmere' && MODES.zm.maps.includes('saltmere'), 'Graveyard Shift only: hidden, hosts zm alone, its own theme');
+  ok(L.graph && L.bands.length === 7 && L.bands.every(b => b.cells.length > 150), `seven areas, all with floor (${L.bands.map(b => b.cells.length)})`);
+  ok(L.bands[L.start].id === 'quay' && L.doors.length === 8, 'starts on the Fish Quay, eight gates');
+  const joins = (x, y) => L.doors.some(d => (d.a === area(x) && d.b === area(y)) || (d.a === area(y) && d.b === area(x)));
+  ok(['quay', 'market', 'cloister', 'close', 'nave', 'slip', 'quay'].every((x, i, a) => i === 0 || joins(a[i - 1], x)), 'the gates make a loop');
+  ok(joins('market', 'pump') && joins('nave', 'pump') && !joins('quay', 'pump'), 'the Pump House opens from Market Row and the Nave, not from the start');
+  ok(L.power && L.power.band === area('pump'), 'the power switch is in the Pump House');
+  ok(L.boss && L.boss.band === area('nave') && L.boss.spots.every(p => L.band[L.cellAt(p.x, p.z)] === L.boss.band), 'boss spots in the Nave');
+  ok(L.bands.every(b => b.i === area('nave') || b.cells.length < L.bands[area('nave')].cells.length), `the boss arena is the roomiest (${L.bands[area('nave')].cells.length} m2)`);
+  ok(L.boxSpots.length === 4 && new Set(L.boxSpots.map(b => b.band)).size === 4, 'four crate spots in four areas');
+  ok(L.machines.length === 6 && L.wallBuys.length >= 10 && L.bands.every(b => L.risers[b.i].length >= 6), 'six machines, ten-plus wall-buys, spawn windows in every area');
+  ok(L.bench.band === area('close') && L.terminal.band === L.start && L.armour.band === area('market') && L.exfil.band === area('slip'), 'bench in the Close, terminal at the start, armour one gate out, exfil on the slip');
+  ok(L.traps.length === 3 && L.traps.every(t => L.doors.some(d => Math.hypot(d.cx - t.x, d.cz - t.z) < 4)), 'three traps, each at a gate');
+  ok(L.questKind === 'font' && L.altar.band === area('nave') && L.relics.map(r => L.bands[r.band].id).sort().join() === 'cloister,market,slip',
+    'a font quest: the bell in the Nave, fonts in Market Row, the Cloister and on the slip');
+  placeZmWalls(map, (1 << L.doors.length) - 1);
+  const nav = new NavGrid(map);
+  for (const [name, inside, door] of [['chandlery', [3, 49], [7, 44.5]], ['chapter house', [4, 4], [7, 8.5]], ['slipway', [77, 48], [78.5, 41.5]]]) {
+    const saved = nav.blocked.slice();
+    for (let dx = -2; dx <= 2; dx++) for (let dz = -1; dz <= 1; dz++) nav.blocked[nav.idx(door[0] + dx, door[1] + dz)] = 1;
+    const seen = reach(nav, inside[0], inside[1]);
+    let n = 0; for (let k = 0; k < seen.length; k++) n += seen[k];
+    ok(n > 10 && n < 100, `${name}: a dead end (${n} cells behind its one doorway)`);
+    nav.blocked.set(saved);
+  }
+  clearZmWalls(map);
+  ok(L.doors.every(d => Object.keys(d.stand).length === 2), 'every gate has a stand point on each side');
+
+  // The quest: the fonts are dry without the power; filled, a font drinks the drowned killed beside it (not one
+  // killed away from it); a thirsty font loses souls; full at ZE.quest.souls; the bell waits for three; the Ferryman.
+  const sim = makeSim('saltmere', 91, [{ id: 'me', name: 'Me', team: 0 }]);
+  toLive(sim);
+  const R = sim.rules, E = R.econ, me = R.crew.find(p => !p.isBot);
+  for (const p of R.crew) { p.spawnProtect = 1e9; if (p.bot) p.bot.update = () => []; }
+  R.plan = () => {}; R._crewPlan = null;
+  for (const d of L.doors) R.open |= 1 << d.i;
+  syncZmDoors(sim.map, R.open); for (const d of L.doors) reblockNav(sim.nav, sim.map, d); R.fields.clear();
+  R._startRound(12); R.spawnT = 999;
+  const use = () => sim.applyCommand(me.id, { cmd: 'zm', act: 'use' });
+  const at = s => { me.ps.x = s.x; me.ps.z = s.z; };
+  const F = L.relics;
+  at(F[0]);
+  const dry = zmUsable(L, me.ps.x, me.ps.z, R._stateFor(me));
+  ok(dry?.kind === 'relic' && dry.off && /power/i.test(dry.why) && !use(), `a font is dry with the power off (${dry?.why})`);
+  R.power = 1;
+  const fill = zmUsable(L, me.ps.x, me.ps.z, R._stateFor(me));
+  ok(fill?.label === 'Fill the font' && fill.ok, 'with the power on: Fill the font (free)');
+  sim.drainEvents();
+  ok(use() && E.quest.woke === 1 && sim.drainEvents().some(e => e.t === 'zfont' && e.state === 1 && e.i === 0), 'the pumps fill it: it wakes');
+  const drinks = zmUsable(L, me.ps.x, me.ps.z, R._stateFor(me));
+  ok(drinks?.off && /0 of/.test(drinks.why), `and shows what it has drunk (${drinks?.why})`);
+  // A kill beside it is a soul; one far off is not.
+  const z0 = R.horde.find(q => !q.alive);
+  const kill = (x, z) => { const q = R.horde.find(h => !h.alive && (h.zFree ?? 0) <= sim.time) ?? z0; R._raise(q, ZK.shambler, { x, z }); sim._damage(q, me, q.hp + 10, 'ar', 3); run(sim, 0.05); };
+  me.ps.x = F[0].x + 4; me.ps.z = F[0].z - 4;
+  kill(F[0].x + 2, F[0].z - 2);
+  ok(E.quest.souls[0] === 1, `a zombie killed beside the font is a soul in it (${E.quest.souls[0]})`);
+  kill(20, 30);
+  ok(E.quest.souls[0] === 1, 'one killed away from it is not');
+  // Thirst: left without a kill it loses souls.
+  run(sim, ZE.quest.thirst + ZE.quest.drain * 0.2);
+  ok(E.quest.souls[0] === 0, `a thirsty font loses its souls (${E.quest.souls[0]})`);
+  let full = false;
+  for (let k = 0; k < ZE.quest.souls; k++) { kill(F[0].x + 1.5, F[0].z - 2.5); }
+  run(sim, 0.1, e => { if (e.t === 'zfont' && e.state === 2) full = true; });
+  ok(E.quest.got === 1 && !(E.quest.woke & 1) && E.quest.souls[0] === ZE.quest.souls, `full at ${ZE.quest.souls} souls: the first font is done (got ${E.quest.got})`);
+  // The bell waits for all three.
+  at(L.altar);
+  const rope = zmUsable(L, me.ps.x, me.ps.z, R._stateFor(me));
+  ok(rope?.kind === 'altar' && rope.off && /1 of 3/.test(rope.why) && !use(), `the bell waits for the fonts (${rope?.why})`);
+  for (const i of [1, 2]) {
+    at(F[i]); ok(use(), `font ${i} filled`);
+    me.ps.x = F[i].x; me.ps.z = F[i].z - 3;
+    for (let k = 0; k < ZE.quest.souls; k++) kill(F[i].x + (k % 2 ? 1.5 : -1.5), F[i].z - 2);
+  }
+  ok(E.quest.got === 7 && !E.quest.woke, `all three full (got ${E.quest.got})`);
+  for (const q of R.horde) if (q.alive) { q.alive = false; q.zFree = 0; }
+  at(L.altar);
+  sim.drainEvents();
+  ok(zmUsable(L, me.ps.x, me.ps.z, R._stateFor(me))?.label === 'Toll the bell' && use() && E.quest.state === 1 && sim.drainEvents().some(e => e.t === 'zwarden' && e.state === 1 && e.k === ZK.ferryman), 'tolling the bell');
+  run(sim, 1.5);
+  const w = sim.players[E.wardenSeat];
+  ok(w?.alive && w.zk === ZK.ferryman && w.zMax >= R.hp * ZM.kinds.ferryman.hp, `the Ferryman rises (${w?.zMax} hp)`);
+  ok(w && L.band[L.cellAt(w.ps.x, w.ps.z)] === area('nave'), 'up the Nave');
+  ok(R.view().boss?.warden && R.view().boss.k === ZK.ferryman, 'its bar shows, as the Ferryman');
+  // The undertow: it sinks (nothing hurts it under the flood), crosses to the nearest of the crew in range and comes
+  // up beneath them: a mate still in the ring is hurt, one who stepped out is not.
+  const mate = R.crew.find(p => p.isBot), side = R.crew.filter(p => p.isBot)[1];
+  w.ps.x = 67; w.ps.z = 10; w.zHoldT = 0;
+  for (const q of R.horde) if (q.alive && q !== w) { q.alive = false; q.zFree = 0; }
+  E.quest.callT = 999;
+  me.ps.x = 40; me.ps.z = 44;
+  mate.ps.x = 70; mate.ps.z = 20; mate.hp = 100; mate.spawnProtect = 0;
+  side.ps.x = 70 + ZM_FERRY.r + 1.2; side.ps.z = 20; side.hp = 100; side.spawnProtect = 0;
+  for (const p of R.crew) p.downed = false;
+  E.quest.diveT = 0.02;
+  let dive = null;
+  run(sim, 0.1, e => { if (e.t === 'zdive') dive = e; });
+  ok(dive && Math.hypot(dive.tx - 70, dive.tz - 20) < 0.3 && dive.r === ZM_FERRY.r && dive.warn === ZM_FERRY.warn, `it dives for the nearest (${dive?.tx}, ${dive?.tz})`);
+  run(sim, ZM_FERRY.sink);
+  const hp0 = w.hp;
+  sim._damage(w, me, 5000, 'ar', 10);
+  ok(w.hp === hp0, 'nothing reaches it under the flood');
+  run(sim, ZM_FERRY.warn - ZM_FERRY.sink - 0.4);
+  ok(mate.hp === 100, 'nobody hurt before it comes up');
+  let up = false;
+  run(sim, 0.6, e => { if (e.t === 'zfx' && e.k === 'surface') up = true; });
+  ok(up && Math.hypot(w.ps.x - 70, w.ps.z - 20) < 0.5, 'it comes up beneath them');
+  ok(mate.hp < 100 || mate.downed, `a mate in the ring is caught (${mate.hp})`);
+  ok(side.hp === 100 && !side.downed, 'one outside it is not');
+  // A bot inside a marked ring steps out of it.
+  E.quest.dive = { x: 60, z: 10, tx: 65, tz: 10, t: 0 };
+  const off = R.kinds.dodge({ x: 66, z: 10 });
+  ok(off && off.x > 0.9, 'a bot in the ring steps out of it');
+  ok(!R.kinds.dodge({ x: 65, z: 10 + ZM_FERRY.r + 2 }), 'one clear of it stays put');
+  E.quest.dive = null; w.zUnderT = 0; w.zHoldT = 0;
+  E.quest.callT = 0.01;
+  const sh0 = R.horde.filter(q => q.alive && q.zk === ZK.shambler).length;
+  run(sim, 0.1);
+  ok(R.horde.filter(q => q.alive && q.zk === ZK.shambler).length > sh0, 'it calls the drowned out of the water');
+  for (const p of R.crew) p.spawnProtect = 1e9;
+  const z = unpackZombie(packZombie(3, w.ps.x, w.ps.z, 0, ZK.ferryman, false));
+  ok(z.kind === ZK.ferryman, 'the Ferryman packs (kind 12)');
+  const k0 = R.killed, pts = R.crew.map(p => p.zm.pts);
+  let down = null;
+  sim._damage(w, me, w.hp + 10, 'ar', 5);
+  run(sim, 0.1, e => { if (e.t === 'zwarden' && e.state === 2) down = e; });
+  ok(!w.alive && E.quest.state === 2 && down?.k === ZK.ferryman, 'put down: the quest is done');
+  ok(R.killed === k0 && R.crew.every((p, k) => p.zm.pts >= pts[k] + ZE.quest.pts), 'it pays everyone and is off the round count');
+  clearZmWalls(sim.map);
+}
+{
+  // The fonts across the wire and a host migration: woken, the souls, the Ferryman and its bar.
+  const { syncZmDoors, reblockNav } = await import('../js/shared/zombies.js');
+  const humans = [{ id: 'h1', name: 'Host', team: 0 }, { id: 'h2', name: 'Guest', team: 0 }];
+  const roster = buildRoster(humans, { mode: 'zm', mapId: 'saltmere', seed: 7 });
+  const host = new Sim({ roster, map: 'saltmere', seed: 7, mode: 'zm' });
+  host.step(DT); toLive(host);
+  const R = host.rules, L = R.L, E = R.econ;
+  for (const p of R.crew) { p.spawnProtect = 1e9; if (p.bot) p.bot.update = () => []; }
+  R.plan = () => {}; R._crewPlan = null;
+  for (const d of L.doors) R.open |= 1 << d.i;
+  syncZmDoors(host.map, R.open); for (const d of L.doors) reblockNav(host.nav, host.map, d); R.fields.clear();
+  R.power = 1; R._startRound(11); R.spawnT = 999;
+  const h1 = host.players.find(p => p.id === 'h1');
+  const go = s => { h1.ps.x = s.x; h1.ps.z = s.z; host.applyCommand('h1', { cmd: 'zm', act: 'use' }); };
+  go(L.relics[1]); E.quest.souls[1] = 5;
+  run(host, 3);
+  const map2 = { ...MAPS.saltmere, walls: MAPS.saltmere.walls.filter(w => !w.zm).map(w => ({ ...w })) };
+  const guest = new Sim({ roster, map: map2, seed: 99, mode: 'zm' });
+  let view = guest.decodeSnapshot(JSON.parse(JSON.stringify(host.encodeSnapshotFor('h2'))), 'h2');
+  const q = (view.obj ?? view.points.obj).quest;
+  ok(q.woke === 2 && q.souls[1] === 5, `a guest sees the filled font and its souls (${q.woke}, ${q.souls})`);
+  E.quest.got = 7; E.quest.woke = 0;
+  go(L.altar);
+  run(host, 1.5);
+  const w = host.players[E.wardenSeat];
+  w.hp = Math.round(w.zMax * 0.6);
+  host.step(DT); host.drainEvents();
+  view = guest.decodeSnapshot(JSON.parse(JSON.stringify(host.encodeSnapshotFor('h2'))), 'h2');
+  const obj = view.obj ?? view.points.obj;
+  ok(obj.boss?.warden && obj.boss.k === ZK.ferryman && Math.abs(obj.boss.hp - 0.6) < 0.02, `a guest sees the Ferryman's bar (${obj.boss?.hp?.toFixed(2)})`);
+  ok(view.players[w.index].zk === ZK.ferryman + 1, 'and the Ferryman itself (view zk 13)');
+  if (guest._restoreMode) {
+    guest.players.forEach((p, i) => { const v = view.players[i]; p.alive = v.alive; p.ps.x = v.x; p.ps.z = v.z; });
+    guest._restoreMode(view);
+    const G = guest.rules, gw = guest.players[G.econ.wardenSeat];
+    ok(G.econ.quest.state === 1 && gw?.zk === ZK.ferryman && Math.abs(gw.hp / gw.zMax - 0.6) < 0.02, 'a migration keeps the Ferryman at the health its bar showed');
+    gw.ps.x = 61; gw.ps.z = 11;
+    for (const p of G.crew) { p.spawnProtect = 1e9; p.ps.x = 67; p.ps.z = 14; }
+    let dived = false;
+    for (let i = 0; i < 16 * SIM_HZ && !dived; i++) { guest.step(DT); dived = guest.drainEvents().some(e => e.t === 'zdive'); }
+    ok(dived, 'and the new host carries on with its dives');
+  }
+  clearZmWalls(map2); clearZmWalls(host.map);
+}
+{
+  // Bots on Saltmere Abbey: one throws the power (solo, from round 3, buying the gates on the way), then a bot fills a
+  // font and holds by it while it drinks.
+  const sim = makeSim('saltmere', 93, [{ id: 'me', name: 'Me', team: 0 }]);
+  toLive(sim);
+  const R = sim.rules, E = R.econ;
+  for (const p of R.crew) { p.spawnProtect = 1e9; if (p.zm) p.zm.pts = 12000; }
+  R._startRound(3);
+  R.spawnT = 999;
+  let by = null, filled = null;
+  const watch = e => { if (e.t === 'zlights') by = e.by; if (e.t === 'zfont' && e.state === 1) filled = e; };
+  for (let t = 0; t < 150 && !R.power; t += 5) run(sim, 5, watch);
+  R._endRound(); R.timer = 999;
+  for (let t = 0; t < 200 && !filled; t += 5) run(sim, 5, watch);
+  ok(R.power === 1 && R.crew.find(p => p.id === by)?.bot, `a bot teammate throws the power (${by})`);
+  ok(filled && R.crew.find(p => p.id === filled.by)?.bot, `a bot fills a font (${filled?.i})`);
+  if (filled) {
+    run(sim, 20);
+    const f = R.L.relics[filled.i];
+    const holder = R.crew.find(p => p.isBot && p.alive && Math.hypot(p.ps.x - f.x, p.ps.z - f.z) < 4);
+    ok(holder, 'and a bot holds by it while it drinks');
+    // A round under way: the drowned come to it and die there.
+    R.timer = 0.01;
+    for (let t = 0; t < 120 && !(E.quest.got & (1 << filled.i)); t += 5) { run(sim, 5); for (const p of R.crew) p.spawnProtect = 1e9; }
+    ok(E.quest.got & (1 << filled.i) || E.quest.souls[filled.i] > 0, `the font drinks the kills made there (${E.quest.souls[filled.i]} souls, got ${E.quest.got})`);
+  }
+  clearZmWalls(sim.map);
+}
+
 // ---- Wonder weapons: the crate's Stormcoil and Rimecaster, on every map ----
 section('wonders');
 {
@@ -1666,7 +1884,7 @@ section('determinism');
 {
   const sig = sim => JSON.stringify([sim.tick, sim.rules.round, sim.rules.killed, sim.rules.crew.map(p => [p.zm.pts, Math.round(p.ps.x * 100), Math.round(p.ps.z * 100)]),
     sim.rules.horde.map(p => (p.alive ? [Math.round(p.ps.x * 100), Math.round(p.ps.z * 100), Math.round(p.hp)] : 0))]);
-  for (const id of ['foundry', 'ashgrove', 'polestar', 'wrenfield']) {
+  for (const id of ['foundry', 'ashgrove', 'polestar', 'wrenfield', 'saltmere']) {
     const a = makeSim(id, 77), b = makeSim(id, 77);
     let same = true;
     for (let t = 0; t < (QUICK ? 40 : 80) && same; t++) { run(a, 1); run(b, 1); same = sig(a) === sig(b); }
@@ -1676,7 +1894,7 @@ section('determinism');
 
 // ---- Performance: a round-20 and a round-30 horde, with the economy busy (every trap armed, sentries, drones) ----
 section('perf');
-for (const id of QUICK ? ['neon', 'ashgrove', 'polestar', 'wrenfield'] : ZM_MAP_IDS) for (const round of [20, 30]) {
+for (const id of QUICK ? ['neon', 'ashgrove', 'polestar', 'wrenfield', 'saltmere'] : ZM_MAP_IDS) for (const round of [20, 30]) {
   const sim = makeSim(id, 99);
   toLive(sim);
   const R = sim.rules;

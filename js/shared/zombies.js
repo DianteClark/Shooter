@@ -49,6 +49,10 @@ export const ZM = {
     // The Barker (Wrenfield Fair's quest boss, called out by the high striker's bell, never a round): heavier than the
     // Listener and slower on its feet, and it fights differently again (ZM_BARKER): it charges down a lane it marks.
     barker: { hp: 52, dmg: 100, speed: 0.6, reach: 2, windup: 0.65, cool: 1.35 },
+    // The Ferryman (Saltmere Abbey's quest boss, called up the nave by the tower bell, never a round): as heavy as the
+    // Barker, slow, a long reach with its pole; it fights from under the flood (ZM_FERRY): it sinks, crosses under the
+    // water and comes up beneath one of the crew.
+    ferryman: { hp: 50, dmg: 95, speed: 0.58, reach: 2.3, windup: 0.7, cool: 1.4 },
   },
   roundMax: 220,                       // Zombies in one round, at most.
   // Account XP in place of the usual kill lines (awards.js, zmXp). Owner notes (1111-32): an escape on round 18 paid
@@ -60,22 +64,23 @@ export const ZM = {
   weaponXp: 0.1, weaponXpCap: 5000,
   perkLimit: 4, perkMax: 6, slotCost: 8000,   // Perks a player may hold; one perk slot (bought at any machine) raises it.
 };
-// Index 9 is the wire's code for a Shieldbearer whose shield is broken (never a host kind), so the Listener is 10 and
-// the Barker 11 (the wire's kind is 4 bits: room up to 15).
-export const ZM_KINDS = ['shambler', 'runner', 'brute', 'boss', 'warden', 'spitter', 'bloater', 'crawler', 'shield', 'shield', 'listener', 'barker'];
+// Index 9 is the wire's code for a Shieldbearer whose shield is broken (never a host kind), so the Listener is 10, the
+// Barker 11 and the Ferryman 12 (the wire's kind is 4 bits: room up to 15).
+export const ZM_KINDS = ['shambler', 'runner', 'brute', 'boss', 'warden', 'spitter', 'bloater', 'crawler', 'shield', 'shield', 'listener', 'barker', 'ferryman'];
 export const ZM_KIND_NAMES = { shambler: 'Shambler', runner: 'Runner', brute: 'Brute', boss: 'Yardmaster', warden: 'Gravewarden',
-  spitter: 'Spitter', bloater: 'Bloater', crawler: 'Crawler', shield: 'Shieldbearer', listener: 'Listener', barker: 'Barker' };
+  spitter: 'Spitter', bloater: 'Bloater', crawler: 'Crawler', shield: 'Shieldbearer', listener: 'Listener', barker: 'Barker', ferryman: 'Ferryman' };
 // Kind indices (p.zk on the host; the view's zk is one more).
-export const ZK = { shambler: 0, runner: 1, brute: 2, boss: 3, warden: 4, spitter: 5, bloater: 6, crawler: 7, shield: 8, listener: 10, barker: 11 };
-export const isBossKind = k => k === 3 || k === 4 || k === 10 || k === 11;
-// The quest's boss (the Gravewarden, the Listener on Polestar Relay, the Barker on Wrenfield Fair): raised by the
-// quest, off the round's count.
-export const isQuestBoss = k => k === 4 || k === 10 || k === 11;
+export const ZK = { shambler: 0, runner: 1, brute: 2, boss: 3, warden: 4, spitter: 5, bloater: 6, crawler: 7, shield: 8, listener: 10, barker: 11, ferryman: 12 };
+export const isBossKind = k => k === 3 || k === 4 || k === 10 || k === 11 || k === 12;
+// The quest's boss (the Gravewarden, the Listener on Polestar Relay, the Barker on Wrenfield Fair, the Ferryman on
+// Saltmere Abbey): raised by the quest, off the round's count.
+export const isQuestBoss = k => k === 4 || k === 10 || k === 11 || k === 12;
 // Each quest's boss, by the layout's questKind: its kind, its name's key (ZM_KIND_NAMES), the opening banner.
 export const ZM_QUEST_BOSS = {
   relic: { kind: 4, key: 'warden', name: 'Gravewarden', rise: ['The relics are set', 'The Gravewarden wakes'] },
   radio: { kind: 10, key: 'listener', name: 'Listener', rise: ['Transmitting', 'The Listener answers'] },
   lantern: { kind: 11, key: 'barker', name: 'Barker', rise: ['The bell rings', 'The Barker steps into the ring'] },
+  font: { kind: 12, key: 'ferryman', name: 'Ferryman', rise: ['The bell tolls', 'The Ferryman comes up the nave'] },
 };
 export const zmQuestBoss = L => ZM_QUEST_BOSS[L?.questKind] ?? ZM_QUEST_BOSS.relic;
 export const questBossByKind = k => Object.values(ZM_QUEST_BOSS).find(b => b.kind === k) ?? ZM_QUEST_BOSS.relic;
@@ -84,6 +89,13 @@ export const questBossByKind = k => Object.values(ZM_QUEST_BOSS).find(b => b.kin
 // `dash` s; anyone in the lane takes `dmg` (grown with the round like a claw), once. It calls `calls` runners up beside
 // it every `call` s (the fair's barkers bring a crowd), never more than `crowd` of them up at once.
 export const ZM_BARKER = { every: 7, range: 18, wind: 1.1, len: 13, w: 2.4, dash: 0.45, dmg: 55, call: 15, calls: 3, crowd: 6 };
+// The Ferryman's undertow (Saltmere Abbey): every `every` s, with one of the crew up within `range` m, it sinks into
+// the flood (`sink` s, untouchable from the moment it goes down), crosses under the water to where they stood and
+// comes up beneath them: a whirlpool ring of `r` m marks the spot the whole `warn` s it is under (sink plus crossing),
+// then `dmg` (grown with the round like a claw) to anyone still inside it. Up again, it stands a moment (`hold` s)
+// before it walks. It calls `calls` shamblers out of the water beside it every `call` s, never more than `crowd` of its
+// callers up at once.
+export const ZM_FERRY = { every: 10, range: 22, sink: 0.6, warn: 1.7, r: 3.2, dmg: 60, hold: 0.8, call: 14, calls: 3, crowd: 6 };
 // Wrenfield Fair's lanterns, by index (the map's `quest.lanterns` order): their colours and names.
 export const ZM_LANTERNS = [
   { id: 'red', name: 'Red', css: '#ff4a3a', hex: 0xff4a3a },
@@ -248,7 +260,9 @@ export const ZE = {
   exfil: { from: 15, cost: 15000, hold: 75, r: 3.2, gap: 0.32 },     // 1111-32: 12000, 60 s, 0.42 s; the wave's brutes at the round's full share.
   // tune: seconds a radio takes to lock on (Polestar Relay's quest); burn: seconds the lanterns burn from the first one
   // lit (Wrenfield Fair's: all four in order before then, or they all go out); wrong: runners a wrong lantern calls up.
-  quest: { pts: 3000, tune: 5, burn: 75, wrong: 3 },
+  // Saltmere Abbey's fonts: a filled font drinks the drowned killed within `fontR` m of it until it holds `souls`; one
+  // left `thirst` s without a kill loses a soul every `drain` s.
+  quest: { pts: 3000, tune: 5, burn: 75, wrong: 3, souls: 12, fontR: 6.5, thirst: 25, drain: 4 },
 };
 export const ZM_TRAP_KINDS = ['shock', 'vent', 'blade'];
 export const ZM_TRAP_NAMES = { shock: 'Live Rail', vent: 'Firedamp Vents', blade: 'Threshers' };
@@ -353,6 +367,8 @@ export const ZM_MAPS = {
   polestar: { graph: true, power: true },
   // The third (docs/ZOMBIES.md "Wrenfield Fair"): its quest is the lanterns (`quest.kind: 'lantern'`), its boss the Barker.
   wrenfield: { graph: true, power: true },
+  // The fourth (docs/ZOMBIES.md "Saltmere Abbey"): its quest is the fonts (`quest.kind: 'font'`), its boss the Ferryman.
+  saltmere: { graph: true, power: true },
 };
 export const ZM_MAP_IDS = Object.keys(ZM_MAPS);
 
@@ -746,8 +762,9 @@ function graphLayout(map, def) {
   // ride the same slots (relics: the steps; altar: where it ends), so the economy, the wire and the tests keep one shape.
   // Wrenfield Fair's lanterns (`kind: 'lantern'`) ride them too: the lanterns are the steps, the high striker the end,
   // and the Oracle that tells the order is one more spot (`oracle`).
-  const Q0 = Z.quest ?? {}, radio = Q0.kind === 'radio', lantern = Q0.kind === 'lantern';
-  const Q = radio ? { altar: Q0.console, relics: Q0.radios } : lantern ? { altar: Q0.striker, relics: Q0.lanterns } : Q0;
+  // Saltmere Abbey's fonts (`kind: 'font'`) too: the fonts are the steps, the tower bell the end.
+  const Q0 = Z.quest ?? {}, radio = Q0.kind === 'radio', lantern = Q0.kind === 'lantern', font = Q0.kind === 'font';
+  const Q = radio ? { altar: Q0.console, relics: Q0.radios } : lantern ? { altar: Q0.striker, relics: Q0.lanterns } : font ? { altar: Q0.bell, relics: Q0.fonts } : Q0;
   const L = {
     mapId: map.id, def, graph: true, start, bands, fences: [], doors, wallBuys, boxSpots, machines, risers, starts: Z.starts.map(p => ({ x: p.x, z: p.z })),
     power, boss, reserved, W, H, main, band, cellAt,
@@ -755,7 +772,7 @@ function graphLayout(map, def) {
     traps: (Z.reserved?.traps ?? []).map((t, i) => ({ i, x: t.x, z: t.z, r: t.r ?? ZE.trap.r, band: bandAt(t.x, t.z) })),
     exfil: Z.reserved?.exfil ? { x: Z.reserved.exfil.x, z: Z.reserved.exfil.z, r: Z.reserved.exfil.r ?? ZE.exfil.r, band: bandAt(Z.reserved.exfil.x, Z.reserved.exfil.z) } : null,
     altar: st(Q.altar), relics: (Q.relics ?? []).map((r, i) => ({ i, x: r.x, z: r.z, band: bandAt(r.x, r.z) })),
-    questKind: radio ? 'radio' : lantern ? 'lantern' : 'relic',
+    questKind: radio ? 'radio' : lantern ? 'lantern' : font ? 'font' : 'relic',
     oracle: lantern && Q0.oracle ? st(Q0.oracle) : null,
   };
   finishEcon(L);
@@ -949,6 +966,18 @@ export function zmUsable(L, x, z, st) {
         : { kind: 'relic', i: r.i, cost: 0, label: 'Light the lantern', lantern: r.i }));
     }
     at(L.altar, () => ({ kind: 'altar', i: 0, cost: 0, label: all ? 'Ring the bell' : 'High striker', off: all ? undefined : true, why: all ? undefined : `${n} of ${L.relics?.length ?? 4} lanterns lit` }));
+  } else if (!q.state && L.questKind === 'font') {
+    // Saltmere Abbey: the fonts are dry until the power runs the pumps; a filled font drinks the drowned killed beside
+    // it (souls) until it is full; then the bell.
+    const n = (L.relics ?? []).filter(r => q.got & (1 << r.i)).length, all = n >= (L.relics?.length ?? 3);
+    for (const r of L.relics ?? []) {
+      if (q.got & (1 << r.i)) continue;
+      const woke = (q.woke ?? 0) & (1 << r.i), souls = q.souls?.[r.i] ?? 0;
+      at(r, () => (!st.power ? { kind: 'relic', i: r.i, cost: 0, label: 'Dry font', font: r.i, off: true, why: 'No power: the pumps are still' }
+        : woke ? { kind: 'relic', i: r.i, cost: 0, label: 'The font drinks', font: r.i, off: true, why: `${souls} of ${ZE.quest.souls}: kill the drowned beside it` }
+          : { kind: 'relic', i: r.i, cost: 0, label: 'Fill the font', font: r.i }));
+    }
+    at(L.altar, () => ({ kind: 'altar', i: 0, cost: 0, label: all ? 'Toll the bell' : 'The bell rope', off: all ? undefined : true, why: all ? undefined : `${n} of ${L.relics?.length ?? 3} fonts full` }));
   } else if (!q.state) {
     for (const r of L.relics ?? []) if (!(q.got & (1 << r.i))) at(r, () => ({ kind: 'relic', i: r.i, cost: 0, label: 'Pick it up' }));
     const n = (L.relics ?? []).filter(r => q.got & (1 << r.i)).length, all = n >= (L.relics?.length ?? 3);
