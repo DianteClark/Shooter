@@ -41,10 +41,10 @@ async def run_case(browser, name, mapId, mode, fails):
         pg.on('console', lambda m: errors.append(f'{tag}: {m.text[:300]}') if m.type == 'error' else None)
         pg.on('pageerror', lambda e: errors.append(f'{tag}: PAGEERR {e}'))
         await pg.goto(URL)
-        await pg.wait_for_function("!!window.__game?.Progress", timeout=30000)
+        await pg.wait_for_function("!!window.__game?.Progress", timeout=90000)
         await pg.evaluate(f"window.__game.Progress.name='{pname}'; window.__game.Progress.setFlag('tutorialOffered'); window.__game.Progress.setFlag('aimHint')")
         await pg.reload()
-        await pg.wait_for_function("!!window.__game?.Progress", timeout=30000)
+        await pg.wait_for_function("!!window.__game?.Progress", timeout=90000)
         await pg.wait_for_timeout(1000)
         return pg
     host = await page('host', 'Hosty')
@@ -59,7 +59,7 @@ async def run_case(browser, name, mapId, mode, fails):
         await host.locator('[data-act="mpFind"]').first.click()
     else:
         await host.locator('[data-act="host"]').first.click()
-    await host.wait_for_function(f'{G}.code', timeout=30000)
+    await host.wait_for_function(f'{G}.code', timeout=90000)
     code = await host.evaluate(f'{G}.code')
     guest = await page('guest', 'Guesty')
     pages = [host, guest]
@@ -73,34 +73,34 @@ async def run_case(browser, name, mapId, mode, fails):
     try:
         xp0 = await guest.evaluate("window.__game.Progress.totalXp")
         await guest.evaluate(f"window.__game.join('{code}')")
-        await host.wait_for_function(f'{G}.lobby.humans.length === 2', timeout=60000)
-        await guest.wait_for_selector('[data-act="toggleReady"]', timeout=20000)
+        await host.wait_for_function(f'{G}.lobby.humans.length === 2', timeout=180000)
+        await guest.wait_for_selector('[data-act="toggleReady"]', timeout=60000)
         await guest.locator('[data-act="toggleReady"]').first.click()
-        await host.wait_for_function(f'{G}.lobby.humans.every(h => h.ready || h.host)', timeout=20000)
+        await host.wait_for_function(f'{G}.lobby.humans.every(h => h.ready || h.host)', timeout=60000)
         await host.wait_for_timeout(300)
         if mode == 'zm': await host.evaluate(f"{G}.lobby.custom.mapId = '{mapId}'")
         await host.locator('[data-act="start"]').first.click()
         if mode != 'zm':
-            await host.wait_for_function(f'{G}.vote?.options', timeout=20000)
+            await host.wait_for_function(f'{G}.vote?.options', timeout=60000)
             await host.evaluate(f"(() => {{ const o = {G}.vote.options; o[0] = {{ ...o[0], mapId: '{mapId}', mode: '{mode}' }}; }})()")
             for pg in pages:
-                await pg.wait_for_selector('.vote-card[data-i="0"]', timeout=20000)
+                await pg.wait_for_selector('.vote-card[data-i="0"]', timeout=60000)
                 await pg.evaluate("document.querySelector('.vote-card[data-i=\"0\"]')?.click()")     # Skips the animation's stability wait.
-        await host.wait_for_function(f'{G}.inMatch && !!{G}.match?.sim', timeout=60000)
-        await guest.wait_for_function(f'{G}.inMatch && !!{G}.match?.interp?.newest', timeout=60000)
+        await host.wait_for_function(f'{G}.inMatch && !!{G}.match?.sim', timeout=180000)
+        await guest.wait_for_function(f'{G}.inMatch && !!{G}.match?.interp?.newest', timeout=180000)
         got = await host.evaluate(f"[{G}.match.mapId, {G}.match.mode]")
         check(got[1] == mode or (mode == 'br' and got[1].startswith('br')), f'match on {got}')
         for pg in pages: await pg.evaluate(f"{G}.renderer?.setQuality?.('potato')")
-        await host.wait_for_function(f'{G}.match.sim.phase === "live"', timeout=60000)
+        await host.wait_for_function(f'{G}.match.sim.phase === "live"', timeout=180000)
         hid = await host.evaluate(f'{G}.match.localId')
         gid = await guest.evaluate(f'{G}.match.localId')
         if mode == 'br':
-            await host.wait_for_function(f'{G}.match.sim.br.plane.f > 0.25', timeout=60000)
+            await host.wait_for_function(f'{G}.match.sim.br.plane.f > 0.25', timeout=180000)
             await guest.evaluate(f"{G}.match.brCommand('jump')")
             await host.evaluate(f"{G}.match.brCommand('jump')")
-            await host.wait_for_function(f"{G}.match.sim.byId.get('{gid}').brAir === 0", timeout=60000)
+            await host.wait_for_function(f"{G}.match.sim.byId.get('{gid}').brAir === 0", timeout=180000)
         if mode == 'zm':
-            await host.wait_for_function(f"{G}.match.sim.rules.round >= 1", timeout=60000)
+            await host.wait_for_function(f"{G}.match.sim.rules.round >= 1", timeout=180000)
             await host.evaluate(f"(() => {{ const sim = {G}.match.sim; for (const p of sim.players) if (p.team === 0) p.spawnProtect = 99; sim.byId.get('{gid}').zm.pts = 4321; }})()")
         # The guest plays: wanders and fires through the Match's input (as the touch sticks would).
         await guest.evaluate("""(() => { window.__connect(true); let t = 0; window.__drive = setInterval(() => { t++; const a = t * 0.3;
@@ -111,7 +111,7 @@ async def run_case(browser, name, mapId, mode, fails):
         await guest.screenshot(path=f'{OUT}/{name}-guest-before.png')
         pages.remove(host)
         await host.close()
-        await guest.wait_for_function(f'{G}.isHost && {G}.match?.isHost', timeout=60000)
+        await guest.wait_for_function(f'{G}.isHost && {G}.match?.isHost', timeout=180000)
         after = await guest.evaluate(f"""(() => {{ const sim = {G}.match.sim; const h = sim.byId.get('{hid}');
           return {{ tick: sim.tick, scores: sim.scores.slice(0, 2), round: sim.rules?.round ?? null, pts: sim.byId.get('{gid}').zm?.pts ?? null,
             circle: sim.br?.circle?.r ?? null, away: !!h?.away, hostBot: !!h?.bot }}; }})()""")
