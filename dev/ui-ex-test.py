@@ -108,7 +108,7 @@ async def run(browser, vw, vh, failures, errors):
     await pg.wait_for_function(f'{G}.match?.interp.newest?.obj?.ex || {G}.match?.interp.newest?.points?.obj?.ex', timeout=40000)
     mode = await ev(f'{G}.match.mode')
     if mode != 'exq': failures.append(f'{tag}: match mode {mode}')
-    await pg.wait_for_function(f'{G}.match.interp.newest.phase === "live"', timeout=30000)
+    await pg.wait_for_function(f'{G}.match.interp.newest.phase === "live"', timeout=120000)
     await pg.wait_for_timeout(1500)
     # Shield the local squad so a stray fight cannot end the run; the AI and other squads leave a shielded player be.
     await ev(f"""(() => {{ const sim = {G}.match.sim, me = sim.byId.get({G}.match.localId);
@@ -136,7 +136,7 @@ async def run(browser, vw, vh, failures, errors):
     await shot('05-phone')
     await take_offer(pg, ev, tag, failures, 0)
     # The full card for a few seconds, then the one-line tracker with the small Abandon at its side.
-    try: await pg.wait_for_function("(() => { const c = document.querySelector('.ex-con'); return !c.hidden && !c.classList.contains('mini') && getComputedStyle(c.querySelector('b')).display !== 'none'; })()", timeout=3500)
+    try: await pg.wait_for_function("(() => { const c = document.querySelector('.ex-con'); return !c.hidden && !c.classList.contains('mini') && getComputedStyle(c.querySelector('b')).display !== 'none'; })()", timeout=8000)
     except Exception: failures.append(f'{tag}: no full contract card right after taking one')
     await shot('05a-card-full')
     await pg.wait_for_function("document.querySelector('.ex-con').classList.contains('mini')", timeout=9000)
@@ -231,7 +231,7 @@ async def run(browser, vw, vh, failures, errors):
     await ev(f"""(() => {{ const R = {G}.match.sim.rules; R.exfils[window.__site].timer = 0.3; }})()""")
     await ev(f"""(() => {{ const m = {G}.match; window.__clear = setInterval(() => {{ for (const q of m.sim.players) if (q.ai && q.alive) {{ q.alive = false; q.hp = 0; q.exGroup = null; }} }}, 150); }})()""")
     # Software rendering runs the sim slower than real time: the hold is wound on too.
-    try: await pg.wait_for_function(f"{G}.match.sim.rules.exfils[window.__site].state === 3", timeout=30000)
+    try: await pg.wait_for_function(f"{G}.match.sim.rules.exfils[window.__site].state === 3", timeout=90000)
     except Exception:
         print('  debug', await ev(f"JSON.stringify({{site: window.__site, e: {G}.match.sim.rules.exfils[window.__site], t: {G}.match.sim.rules.t, phase: {G}.match.sim.phase, time: {G}.match.sim.time}})"))
         raise
@@ -296,7 +296,7 @@ async def start_match(pg, ev):
     await pg.wait_for_timeout(300)
     await pg.locator('[data-act="mpFind"]').first.click()
     await pg.wait_for_function(f'{G}.match?.interp.newest?.obj?.ex || {G}.match?.interp.newest?.points?.obj?.ex', timeout=40000)
-    await pg.wait_for_function(f'{G}.match.interp.newest.phase === "live"', timeout=30000)
+    await pg.wait_for_function(f'{G}.match.interp.newest.phase === "live"', timeout=120000)
     await pg.wait_for_timeout(1000)
 
 

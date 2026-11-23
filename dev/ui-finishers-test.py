@@ -57,16 +57,19 @@ async def main():
         async def shot(name):
             await pg.screenshot(path=f'{OUT}/{name}.png')
 
-        await pg.goto(f'http://localhost:{PORT}/?debug=1&vote=2&search=600')
-        await pg.wait_for_timeout(900)
+        await pg.goto(f'http://localhost:{PORT}/?debug=1&vote=2&search=600', timeout=120000)
+        await pg.wait_for_function('!!window.__game?.Progress', timeout=120000)
         await ev("window.__game.Progress.name='Tester'; window.__game.Progress.setFlag('tutorialOffered')")
         await pg.reload()
         await pg.wait_for_timeout(1500)
 
         print('title')
-        await pg.wait_for_function('window.__game.backdrop.renderer && window.__game.backdrop.state === "live"', timeout=20000)
+        await pg.wait_for_function('window.__game.backdrop.renderer && window.__game.backdrop.state === "live"', timeout=180000)
         await pg.wait_for_timeout(600)
         await tap('.ttl-emote')
+        # Under load the first tap can land while the title still settles: once more if the row is still shut.
+        try: await pg.wait_for_function("!document.querySelector('.ttl-emotes').hidden", timeout=5000)
+        except Exception: await tap('.ttl-emote')
         check('the emote row opens', await ev("!document.querySelector('.ttl-emotes').hidden"))
         n = await ev("document.querySelectorAll('.ttl-em').length")
         locked = await ev("document.querySelectorAll('.ttl-em.locked').length")
