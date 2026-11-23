@@ -92,7 +92,7 @@ async def run(browser, name, mapId, mode, rows):
     await pg.wait_for_function('!!window.__game?.Progress', timeout=90000)
     await pg.wait_for_timeout(1000)
     if mode == 'cp':
-        pick = ['[data-act="cpOp"][data-o="1"]', '[data-act="cpPick"][data-k="11"]'] if name == 'cpfinale' else ['[data-act="cpPick"][data-k="7"]']
+        pick = ['[data-act="cpOp"][data-o="1"]', '[data-act="cpPick"][data-k="11"]'] if name == 'cpfinale' else ['[data-act="cpOp"][data-o="0"]', '[data-act="cpPick"][data-k="7"]']     # The tab opens on the next mission to play (Starfall's, all open).
         for sel in ['[data-act="multiplayer"]', '[data-act="mpTab"][data-tab="campaign"]', *pick, '[data-act="cpBrief"]', '[data-act="cpSolo"]']:
             await pg.locator(sel).first.click()
             await pg.wait_for_timeout(700)
