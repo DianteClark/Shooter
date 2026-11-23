@@ -209,7 +209,8 @@ async def main():
                 s = await state()
             check('a touch leaves controller mode, sticks come back', not s['padOn'] and s['stickOpacity'] != '0', s)
             await pg.evaluate('window.__connect(false)')
-            await pg.wait_for_timeout(300)
+            try: await pg.wait_for_function("(document.querySelector('.hud .feed')?.textContent ?? '').includes('disconnected')", timeout=10000)
+            except Exception: pass
             feed = await pg.evaluate("document.querySelector('.hud .feed')?.textContent ?? ''")
             check('disconnect toast in the match feed', 'disconnected' in feed, feed[-80:])
 
