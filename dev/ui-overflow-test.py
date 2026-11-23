@@ -256,9 +256,11 @@ async def main():
                     if VERBOSE:
                         for t in r['trunc']:
                             print(f'  trunc {vw}x{vh} {label}: {t}')
+                    n0 = len(fails)
                     for kind in ('spill', 'cut', 'broken'):
                         for x in r[kind]:
                             fails.append(f'{vw}x{vh} {label}: {kind} "{x["text"]}" in {x["where"]}' + (f' (past {x.get("past") or x.get("box")}{", by " + str(x["by"]) + "px" if "by" in x else ""})' if kind != 'broken' else ''))
+                    for f in fails[n0:]: print('FAIL', f, flush=True)     # As they come: a long run cut short still reports.
                     if SHOTS:
                         os.makedirs(SHOTS, exist_ok=True)
                         await pg.screenshot(path=os.path.join(SHOTS, f'{vw}x{vh}-{label.replace(" ", "_").replace("/", "-")}.png'))
