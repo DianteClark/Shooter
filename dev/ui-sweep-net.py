@@ -59,6 +59,7 @@ async def run_case(browser, name, mapId, mode, fails):
         await host.locator('[data-act="mpFind"]').first.click()
     else:
         await host.locator('[data-act="host"]').first.click()
+    print('     waiting:', "f'{G}.code'"[:90], flush=True) if os.environ.get('NET_TRACE') else None
     await host.wait_for_function(f'{G}.code', timeout=90000, polling=500)
     code = await host.evaluate(f'{G}.code')
     guest = await page('guest', 'Guesty')
@@ -73,33 +74,44 @@ async def run_case(browser, name, mapId, mode, fails):
     try:
         xp0 = await guest.evaluate("window.__game.Progress.totalXp")
         await guest.evaluate(f"window.__game.join('{code}')")
+        print('     waiting:', "f'{G}.lobby.humans.length === 2'"[:90], flush=True) if os.environ.get('NET_TRACE') else None
         await host.wait_for_function(f'{G}.lobby.humans.length === 2', timeout=180000, polling=500)
         await guest.wait_for_selector('[data-act="toggleReady"]', timeout=60000)
         await guest.locator('[data-act="toggleReady"]').first.click()
+        print('     waiting:', "f'{G}.lobby.humans.every(h => h.ready || h.host)'"[:90], flush=True) if os.environ.get('NET_TRACE') else None
         await host.wait_for_function(f'{G}.lobby.humans.every(h => h.ready || h.host)', timeout=60000, polling=500)
         await host.wait_for_timeout(300)
         if mode == 'zm': await host.evaluate(f"{G}.lobby.custom.mapId = '{mapId}'")
         await host.locator('[data-act="start"]').first.click()
         if mode != 'zm':
+            print('     waiting:', "f'{G}.vote?.options'"[:90], flush=True) if os.environ.get('NET_TRACE') else None
             await host.wait_for_function(f'{G}.vote?.options', timeout=60000, polling=500)
-            await host.evaluate(f"(() => {{ const o = {G}.vote.options; o[0] = {{ ...o[0], mapId: '{mapId}', mode: '{mode}' }}; }})()")
+            # Every card is the case's map and mode: under load the 15 s vote can end before a page has voted, and a
+            # random card's match (a TDM where a BR was wanted) then fails the case's later waits (bug sweep 2026-11-22).
+            await host.evaluate(f"(() => {{ const o = {G}.vote.options; for (let i = 0; i < o.length; i++) o[i] = {{ ...o[i], mapId: '{mapId}', mode: '{mode}' }}; }})()")
             for pg in pages:
-                await pg.wait_for_selector('.vote-card[data-i="0"]', timeout=60000)
+                await pg.wait_for_function(f'!!document.querySelector(\'.vote-card[data-i="0"]\') || {G}.inMatch', timeout=180000, polling=500)
                 await pg.evaluate("document.querySelector('.vote-card[data-i=\"0\"]')?.click()")     # Skips the animation's stability wait.
+        print('     waiting:', "f'{G}.inMatch && !!{G}.match?.sim'"[:90], flush=True) if os.environ.get('NET_TRACE') else None
         await host.wait_for_function(f'{G}.inMatch && !!{G}.match?.sim', timeout=180000, polling=500)
+        print('     waiting:', "f'{G}.inMatch && !!{G}.match?.interp?.newest'"[:90], flush=True) if os.environ.get('NET_TRACE') else None
         await guest.wait_for_function(f'{G}.inMatch && !!{G}.match?.interp?.newest', timeout=180000, polling=500)
         got = await host.evaluate(f"[{G}.match.mapId, {G}.match.mode]")
         check(got[1] == mode or (mode == 'br' and got[1].startswith('br')), f'match on {got}')
         for pg in pages: await pg.evaluate(f"{G}.renderer?.setQuality?.('potato')")
+        print('     waiting:', 'f\'{G}.match.sim.phase === "live"\''[:90], flush=True) if os.environ.get('NET_TRACE') else None
         await host.wait_for_function(f'{G}.match.sim.phase === "live"', timeout=180000, polling=500)
         hid = await host.evaluate(f'{G}.match.localId')
         gid = await guest.evaluate(f'{G}.match.localId')
         if mode == 'br':
+            print('     waiting:', "f'{G}.match.sim.br.plane.f > 0.25'"[:90], flush=True) if os.environ.get('NET_TRACE') else None
             await host.wait_for_function(f'{G}.match.sim.br.plane.f > 0.25', timeout=180000, polling=500)
             await guest.evaluate(f"{G}.match.brCommand('jump')")
             await host.evaluate(f"{G}.match.brCommand('jump')")
+            print('     waiting:', 'f"{G}.match.sim.byId.get(\'{gid}\').brAir === 0"'[:90], flush=True) if os.environ.get('NET_TRACE') else None
             await host.wait_for_function(f"{G}.match.sim.byId.get('{gid}').brAir === 0", timeout=180000, polling=500)
         if mode == 'zm':
+            print('     waiting:', 'f"{G}.match.sim.rules.round >= 1"'[:90], flush=True) if os.environ.get('NET_TRACE') else None
             await host.wait_for_function(f"{G}.match.sim.rules.round >= 1", timeout=180000, polling=500)
             await host.evaluate(f"(() => {{ const sim = {G}.match.sim; for (const p of sim.players) if (p.team === 0) p.spawnProtect = 99; sim.byId.get('{gid}').zm.pts = 4321; }})()")
         # The guest plays: wanders and fires through the Match's input (as the touch sticks would).
@@ -111,6 +123,7 @@ async def run_case(browser, name, mapId, mode, fails):
         await guest.screenshot(path=f'{OUT}/{name}-guest-before.png')
         pages.remove(host)
         await host.close()
+        print('     waiting:', "f'{G}.isHost && {G}.match?.isHost'"[:90], flush=True) if os.environ.get('NET_TRACE') else None
         await guest.wait_for_function(f'{G}.isHost && {G}.match?.isHost', timeout=180000, polling=500)
         after = await guest.evaluate(f"""(() => {{ const sim = {G}.match.sim; const h = sim.byId.get('{hid}');
           return {{ tick: sim.tick, scores: sim.scores.slice(0, 2), round: sim.rules?.round ?? null, pts: sim.byId.get('{gid}').zm?.pts ?? null,
@@ -133,6 +146,7 @@ async def run_case(browser, name, mapId, mode, fails):
         await guest.evaluate(f"""(() => {{ const m = {G}.match, sim = m.sim;
           if (m.mode === 'zm') {{ for (const p of sim.players) if (p.team === 0 && p.alive) {{ p.spawnProtect = 0; p.downed = false; sim._selfKill(p, 'bleed'); }} }}
           else sim._end(sim.byId.get(m.localId).team); }})()""")
+        print('     waiting:', '"window.__game.menu.el.dataset.screen === \'results\'"'[:90], flush=True) if os.environ.get('NET_TRACE') else None
         await guest.wait_for_function("window.__game.menu.el.dataset.screen === 'results'", timeout=90000, polling=500)
         await guest.wait_for_timeout(3000)
         await guest.screenshot(path=f'{OUT}/{name}-guest-results.png')
