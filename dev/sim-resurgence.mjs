@@ -126,7 +126,8 @@ function redeploys() {
   check(q3.slice(0, 3).every(p => p.br.redeployT > 0), 'three dead, all waiting (the fourth is up)');
   check(s3.br.tryDown(q3[3], null, null) && q3[3].downed && !s3.br.squadsOut.has(t3), 'the last one up goes down, not out: help is coming');
   let ok = false;
-  for (let i = 0; i < (RB.redeploy[0] + BR.glide + 8) * SIM_HZ && !ok; i++) { s3.step(STEP); s3.drainEvents(); if (!q3[3].downed && q3[3].alive) ok = true; q3[3].hp = Math.max(q3[3].hp, 60); }
+  for (let i = 0; i < (RB.redeploy[0] + BR.glide + 14) * SIM_HZ && !ok; i++) { s3.step(STEP); s3.drainEvents(); if (!q3[3].downed && q3[3].alive) ok = true; q3[3].hp = Math.max(q3[3].hp, 60); }
+  // 14 s on the ground: on Kittiwake Bay they land 9 m off in a fight, take the plates first, and revive 10 s after landing.
   check(ok, 'a redeployed bot lands by the downed one and revives them');
 }
 
