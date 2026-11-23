@@ -124,6 +124,12 @@ function unlockInfo0(kind, id, { weapon = null, operator = null } = {}) {
       const now = weapon ? Progress.weaponLevel(weapon) : 1, goal = a?.unlockLevel ?? 1;
       return { ...base, name: a?.name ?? id, how: `Reach weapon level ${goal} with the ${WEAPONS[weapon]?.name ?? 'weapon'}`, unlocked: !!a?.unlocked, ...pair(now, goal), art: icon(a?.slot ?? 'optic', { size: 64 }), sub: WEAPONS[weapon]?.name };
     }
+    // The Golden Gun has no level: it is earned by maxing everything (Progress.goldenStatus), its four steps.
+    if (kind === 'weapon' && id === 'golden') {
+      const g = Progress.goldenStatus();
+      return { ...base, name: WEAPONS[id]?.name ?? id, how: g.requirement, unlocked: g.earned, ...pair(g.steps.filter(x => x.done).length, g.steps.length), play: null,
+        art: icon(id, { size: 40 }), steps: g.steps };
+    }
     if (GEAR[kind]) {
       const item = GEAR[kind][id], need = itemUnlockLevel(kind, id), peak = level(), ch = Progress.unlockChallenge(kind, id);
       const open = Progress.isItemUnlocked(kind, id);
