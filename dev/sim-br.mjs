@@ -320,10 +320,12 @@ function flightUnits() {
   while (sim.time < 70 && sim.players.some(p => p.brAir)) { sim.step(STEP); sim.drainEvents(); }
   const view = guest.decodeSnapshot(JSON.parse(JSON.stringify(sim.encodeSnapshotFor(sim.players[0].id))), sim.players[0].id);
   check(Math.abs(view.br.plane.fx - sim.br.plane.fx) < 1 && Math.abs(view.br.plane.tz - sim.br.plane.tz) < 1, 'a guest decodes the same line');
-  const landed = sim.players.filter(p => p.alive && !p.brAir);
+  // Down from the transport: the living on the ground and anyone already killed there (a hot drop on Meridian's seed 2
+  // has four dead by 30 s, bug sweep 2026-11-22).
+  const landed = sim.players.filter(p => p.alive && !p.brAir), down = sim.players.filter(p => !p.brAir);
   const spots = new Set([...sim.br.plans.values()].map(pl => pl.poi?.id));
   const onMap = landed.every(p => p.ps.x > 0 && p.ps.x < W && p.ps.z > 0 && p.ps.z < H);
-  check(landed.length >= 30 && onMap, `edge line (seed ${edgeSeed}): everyone lands on the map (${landed.length})`);
+  check(down.length >= 30 && onMap, `edge line (seed ${edgeSeed}): everyone lands on the map (${landed.length} standing, ${down.length - landed.length} killed)`);
   check(spots.size >= 5, `edge line: bot squads spread over ${spots.size} places`);
 }
 
