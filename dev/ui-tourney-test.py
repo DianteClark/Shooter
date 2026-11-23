@@ -79,8 +79,14 @@ async def main():
 
             async def tap(pg, sel, wait=500):
                 # The results' Unlocked summary (an overlay after the reel) covers the screen: Continue closes it.
-                if 'ux' not in sel: await pg.evaluate("document.querySelector('.overlay.show [data-act=\"uxDone\"]')?.click()")
-                await pg.locator(sel).first.tap()
+                # Under load it can open after that click (the reel ends late): close it and tap again (bug sweep 2026-11-22).
+                for i in range(6):
+                    if 'ux' not in sel: await pg.evaluate("document.querySelector('.overlay.show [data-act=\"uxDone\"]')?.click()")
+                    try:
+                        await pg.locator(sel).first.tap(timeout=10000 if i < 5 else 30000)
+                        break
+                    except Exception:
+                        if i == 5: raise
                 await pg.wait_for_timeout(wait)
 
             async def play_round(pg, win, name):
