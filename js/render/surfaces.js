@@ -16,7 +16,10 @@ export class Surfaces {
   constructor(map) {
     this.W = Math.ceil(map.width);
     this.H = Math.ceil(map.height);
-    this.walls = map.walls;
+    // A copy: the grid holds indices, and map.walls changes under a match (Graveyard Shift's doors are spliced out as
+    // they open, a Rampart comes and goes), which left indices past the end (a TypeError every frame in a help video).
+    this.walls = map.walls.slice();
+    this.live = map.walls;
     this.map = map;
     this.cells = new Int16Array(this.W * this.H * PER_CELL).fill(-1);
     map.walls.forEach((w, idx) => {
@@ -40,6 +43,7 @@ export class Surfaces {
       if (i < 0) break;
       const w = this.walls[i];
       if (x < w.x || x > w.x + w.w || z < w.z || z > w.z + w.d) continue;
+      if (w.zm && !this.live.includes(w)) continue;      // An opened Graveyard Shift door (rare: only on its cells).
       if (w.kind === 'water') water = w; else return w;
     }
     return water;
