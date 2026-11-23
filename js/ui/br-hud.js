@@ -904,6 +904,36 @@ export class BrHud {
     return c;
   }
 
+  // Place names on the big map, laid out once per map: the best places first, and a name that would run into one
+  // already placed moves a line up or down, or a little sideways (the 1122 islands pack districts and places close
+  // enough that "WESTGATE" and "OLD QUARTER" printed over each other).
+  #poiLayout(g, pois, s) {
+    // A guest's view brings a new list every snapshot: keyed on what it holds (and on the font having loaded, which
+    // changes the widths).
+    const key = `${pois.length}:${pois[0]?.name}:${pois[0]?.x}:${pois.at(-1)?.name}:${s}:${document.fonts?.status}`;
+    if (this.poiL?.key === key) return this.poiL.out;
+    const placed = [], out = [];
+    const order = pois.map((p, i) => [p, i]).sort((a, b) => (a[0].tier ?? 3) - (b[0].tier ?? 3) || a[1] - b[1]);
+    for (const [poi] of order) {
+      const size = poi.tier === 1 ? 20 : 16, font = `${size}px Oswald, "Arial Narrow", sans-serif`, text = poi.name.toUpperCase();
+      g.font = font;
+      const w = g.measureText(text).width + 8, h = size + 2, x = poi.x * s, y = poi.z * s;
+      const clampX = v => Math.max(w / 2, Math.min(MAP_PX - w / 2, v)), clampY = v => Math.max(h / 2, Math.min(MAP_PX - h / 2, v));
+      let best = null, bestHit = Infinity;
+      for (const [dx, dy] of [[0, 0], [0, -h], [0, h], [-w * 0.3, 0], [w * 0.3, 0], [0, -2 * h], [0, 2 * h], [-w * 0.3, -h], [w * 0.3, -h], [-w * 0.3, h], [w * 0.3, h]]) {
+        const lx = clampX(x + dx), ly = clampY(y + dy);
+        let hit = 0;
+        for (const b of placed) hit += Math.max(0, Math.min(lx + w / 2, b.r) - Math.max(lx - w / 2, b.l)) * Math.max(0, Math.min(ly + h / 2, b.b) - Math.max(ly - h / 2, b.t));
+        if (hit < bestHit) { best = [lx, ly]; bestHit = hit; }
+        if (!hit) break;
+      }
+      placed.push({ l: best[0] - w / 2, r: best[0] + w / 2, t: best[1] - h / 2, b: best[1] + h / 2 });
+      out.push({ text, font, x: best[0], y: best[1], fill: poi.tier === 1 ? '#ffc24a' : poi.tier === 2 ? '#f2f0e6' : '#b8bfb6' });
+    }
+    this.poiL = { key, out };
+    return out;
+  }
+
   #drawBigMap(view, me) {
     const g = this.mapG, br = view.br, s = MAP_PX / Math.max(this.map.width, this.map.height);
     g.drawImage(this.#mapBase(), 0, 0);
@@ -919,14 +949,11 @@ export class BrHud {
     }
     // Places.
     g.textAlign = 'center'; g.textBaseline = 'middle';
-    for (const poi of br.pois ?? []) {
-      const x = poi.x * s, y = poi.z * s;
-      g.font = `${poi.tier === 1 ? 20 : 16}px Oswald, "Arial Narrow", sans-serif`;
-      const half = g.measureText(poi.name.toUpperCase()).width / 2 + 4;
-      const lx = Math.max(half, Math.min(MAP_PX - half, x));
-      g.lineWidth = 4; g.strokeStyle = 'rgba(10,13,17,.85)'; g.strokeText(poi.name.toUpperCase(), lx, y);
-      g.fillStyle = poi.tier === 1 ? '#ffc24a' : poi.tier === 2 ? '#f2f0e6' : '#b8bfb6';
-      g.fillText(poi.name.toUpperCase(), lx, y);
+    for (const L of this.#poiLayout(g, br.pois ?? [], s)) {
+      g.font = L.font;
+      g.lineWidth = 4; g.strokeStyle = 'rgba(10,13,17,.85)'; g.strokeText(L.text, L.x, L.y);
+      g.fillStyle = L.fill;
+      g.fillText(L.text, L.x, L.y);
     }
     // Flight line and transport.
     if (br.plane.f < 1) {

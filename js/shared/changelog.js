@@ -7,6 +7,7 @@ export const CHANGELOG = [
     build: 'NEXT', date: '2026-11-22', title: 'Fixes',
     items: [
       'On smaller phones the Breakthrough mode button on the Ground War tab split its name mid-word; it now breaks as "Break-through".',
+      'Battle royale drop maps no longer print place names over each other (Westgate and Old Quarter on Meridian City, Lifeboat Station and Fish Market on Kittiwake Bay, and others): a name that would collide moves just above or below.',
       'The Golden Gun\'s card in the Gunsmith and its unlock sheet said "Reach level 1" while it stayed locked. They now say what earns it (max everything) and show its four steps with your progress.',
     ],
   },
