@@ -217,7 +217,9 @@ async def main():
             await guest.bring_to_front()
             for _ in range(60):
                 if await guest.evaluate(f"!{G}.net"): break
-                for sel in ('[data-act="resMenu"]', '[data-act="voteLeave"]', '[data-act="leaveLobby"]', '[data-act="qolYes"]'):
+                # The results reel (Skip) and the Unlocked summary it opens over the results (Continue) come first: the
+                # summary covers resMenu, so a tap there never lands (bug sweep 2026-11-20 test 1).
+                for sel in ('.res-skip:not([hidden])', '.overlay.show [data-act="uxDone"]', '[data-act="resMenu"]', '[data-act="voteLeave"]', '[data-act="leaveLobby"]', '[data-act="qolYes"]'):
                     loc = guest.locator(sel)
                     if await loc.count() and await loc.first.is_visible():
                         try: await loc.first.click(timeout=3000)
