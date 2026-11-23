@@ -8,6 +8,8 @@ export const CHANGELOG = [
     items: [
       'On smaller phones the Breakthrough mode button on the Ground War tab split its name mid-word; it now breaks as "Break-through".',
       'Battle royale drop maps no longer print place names over each other (Westgate and Old Quarter on Meridian City, Lifeboat Station and Fish Market on Kittiwake Bay, and others): a name that would collide moves just above or below.',
+      'Service Record on larger phones: the Pro perks row wrapped onto a second line with the new perks and pushed Next unlocks off the bottom of the screen. Every perk fits on one row again.',
+      'Campaign briefing on larger phones: the Deploy button of Starfall\'s final mission on Veteran ran off the bottom of the screen. The map picture now gives way.',
       'The Golden Gun\'s card in the Gunsmith and its unlock sheet said "Reach level 1" while it stayed locked. They now say what earns it (max everything) and show its four steps with your progress.',
     ],
   },

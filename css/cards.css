@@ -164,9 +164,9 @@
 #ui .pf-rankname .vet-tag { margin-left: 6px; vertical-align: 2px; }
 #ui .pf-callcard { align-self: flex-start; padding: 0; margin: 6px 0 2px; background: none; line-height: 0; position: relative; z-index: 1; transition: transform var(--dur-fast) var(--ease-out); }
 #ui .pf-callcard:active { transform: scale(.97); }
-.pf-pro { display: grid; grid-template-columns: repeat(16, minmax(0, 1fr)); gap: 3px; }   /* One row: every perk, Hard Target (Extraction) the sixteenth. */
+.pf-pro { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 3px; }   /* One row of every perk, however many (21 since 1122-4: a second row pushed Next unlocks off a 932 x 430 screen). */
 .pf-pro span { position: relative; display: grid; place-items: center; height: 30px; background: rgba(47,57,68,.7); color: var(--c-rail); }
-#ui .pf-pro span .ico { height: 18px; }
+#ui .pf-pro span .ico { height: 18px; max-width: calc(100% - 2px); }
 .pf-pro span i { position: absolute; left: 2px; right: 2px; bottom: 2px; height: 2px; background: rgba(231,234,228,.12); }
 .pf-pro span i::after { content: ''; position: absolute; inset: 0; background: var(--c-sodium); transform-origin: left; transform: scaleX(var(--f)); }
 .pf-pro span.on { color: var(--c-gold); background: rgba(255,215,94,.12); box-shadow: inset 0 0 0 1px rgba(255,215,94,.55); --icon-accent: #fff4bf; }

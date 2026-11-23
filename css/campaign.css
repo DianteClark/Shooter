@@ -96,7 +96,7 @@
 #ui .cpb-obj li::before { content: counter(st); flex: none; width: 16px; font: 400 12px/1 var(--f-stencil); color: var(--c-haze); }
 #ui .cpb-obj li .ico { flex: none; height: 13px; color: #7cc8ff; }
 #ui .cpb-side { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: var(--sp-2); overflow: hidden; }
-#ui .cpb-art { flex: none; height: 70px; background: center / cover no-repeat var(--c-steel); box-shadow: var(--edge); clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px); }
+#ui .cpb-art { flex: 0 1 70px; min-height: 0; height: 70px;   /* Gives way first when the side runs long (Starfall's Veteran pay line at 932 x 430 pushed Deploy off the screen). */ background: center / cover no-repeat var(--c-steel); box-shadow: var(--edge); clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px); }
 #ui .cpb-stars { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; }
 #ui .cpb-stars li { display: flex; align-items: center; gap: 6px; font: 400 var(--fs-caption)/1.2 var(--f-body); color: var(--c-chalk); }
 #ui .cpb-stars .cps .ico { color: var(--c-gold); }
