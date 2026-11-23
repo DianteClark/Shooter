@@ -4,6 +4,14 @@
 
 export const CHANGELOG = [
   {
+    build: 'NEXT', date: '2026-11-22', title: 'Fixes',
+    items: [
+      'Conquest on a smaller phone: the ticket plate no longer covers the last flags in the row along the top; it sits under them.',
+      'Snipers Only: a player with Overkill now gets a pistol in place of the second primary, as everyone else does.',
+      'Bots now get out from under an airstrike or a grenade when they are at full health, instead of stepping back and forth on the spot.',
+    ],
+  },
+  {
     build: '1122-10', date: '2026-11-22', title: 'Smoother matches when your phone hosts',
     items: [
       'When your phone hosts, matches no longer stutter in their first seconds or when a battle royale squad lands: the host gets ready while the match loads.',
