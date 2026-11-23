@@ -118,6 +118,7 @@ async def main():
                 await pg.set_viewport_size({'width': w, 'height': h})
                 await title()
                 await tap('[data-act="multiplayer"]', 800)
+                await tap('[data-act="mpTab"][data-tab="standard"]', 800)     # Multiplayer reopens on the last tab (Campaign, below).
                 await measure('mp-spotlight', w, h)
                 await tap('[data-act="mpTourney"]', 900)
                 await measure('tourney-bracket', w, h)
