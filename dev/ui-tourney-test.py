@@ -86,6 +86,7 @@ async def main():
                         await pg.locator(sel).first.tap(timeout=10000 if i < 5 else 30000)
                         break
                     except Exception:
+                        if not await pg.locator(sel).count(): break     # It landed after all (the screen moved on).
                         if i == 5: raise
                 await pg.wait_for_timeout(wait)
 
