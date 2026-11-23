@@ -95,8 +95,13 @@ async def main():
               m.ps.x = ph.x; m.ps.z = ph.z + 1; }})()""")
             await host.wait_for_selector('.ex-phone:not([hidden]):not(.off)', timeout=15000)
             await host.wait_for_timeout(300)
-            await host.locator('.ex-phone').first.click()
-            await host.wait_for_timeout(400)
+            # Under load the offers can take a while to open, or the first tap is lost: tap the phone again until they show.
+            for _ in range(6):
+                await host.locator('.ex-phone').first.click()
+                try:
+                    await host.locator('.ex-offer[data-k="0"]').first.wait_for(state='visible', timeout=10000)
+                    break
+                except Exception: pass
             await host.locator('.ex-offer[data-k="0"]').first.click()
             await host.wait_for_function(f'{G}.match.sim.rules.squads.get({info[0]}).contract', timeout=15000)
             # Shield the squad and keep the AI off it; the guest reads its contract from the wire.
