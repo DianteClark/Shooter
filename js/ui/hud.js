@@ -656,6 +656,7 @@ export class HUD {
     this.strip.rows.forEach((row, n) => {
       tops.push(y);
       const h = Math.max(row.offsetHeight, STRIP_ROW_H[n]) * k;
+      this.stripLaidH[n] = row.offsetHeight;
       let lo = safe.l + 6, hi = W - safe.r - 6;
       for (const r of obstacles) {
         if (r.bottom <= y + 2 || r.top >= y + h - 2) continue;
@@ -731,6 +732,11 @@ export class HUD {
   // match (Headquarters' "Defend your HQ" arrives with the first HQ), so the rects follow the rows' size through a
   // ResizeObserver rather than the one measure at the start, which would see them empty.
   #measureStripRows() {
+    // A row that grew or shrank since the layout placed the rows under it (the campaign's objective card filling in
+    // after the layout saw it empty put the boss bar over its foot): place them again, once a frame at most.
+    if (this.strip.rows.some((r, n) => n < 2 && Math.abs(r.offsetHeight - (this.stripLaidH[n] ?? r.offsetHeight)) > 1) && !this.stripRelayout) {
+      this.stripRelayout = requestAnimationFrame(() => { this.stripRelayout = 0; this.layout(); });
+    }
     this.stripRects = [0, 1].map(n => {
       const r = this.strip.rows[n].getBoundingClientRect();
       return r.width > 0 && r.height > 0 ? { x0: r.left, y0: r.top, x1: r.right, y1: r.bottom } : null;
@@ -1261,6 +1267,8 @@ export class HUD {
     // Every mode's state in one place: the objective strip under the score bar (see ObjStrip and layout()).
     this.strip = new ObjStrip(el, $('.scorebar'));
     this.stripRects = [null, null];
+    this.stripLaidH = [];         // Each strip row's height when layout() last placed the rows.
+    this.stripRelayout = 0;
     if (typeof ResizeObserver === 'function') {
       const ro = new ResizeObserver(() => this.#measureStripRows());
       ro.observe(this.strip.rows[0]);
