@@ -4,6 +4,13 @@
 
 export const CHANGELOG = [
   {
+    build: 'NEXT', date: '2026-11-22', title: 'Fixes',
+    items: [
+      'On smaller phones the Breakthrough mode button on the Ground War tab split its name mid-word; it now breaks as "Break-through".',
+      'The Golden Gun\'s card in the Gunsmith and its unlock sheet said "Reach level 1" while it stayed locked. They now say what earns it (max everything) and show its four steps with your progress.',
+    ],
+  },
+  {
     build: '1122-10', date: '2026-11-22', title: 'Smoother matches when your phone hosts',
     items: [
       'When your phone hosts, matches no longer stutter in their first seconds or when a battle royale squad lands: the host gets ready while the match loads.',
