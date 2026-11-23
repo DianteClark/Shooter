@@ -16,6 +16,7 @@
 // Modes that deal everyone's gun themselves (Gun Game, One in the Chamber, Infected, Showdown) ignore snipers and melee; battle
 // royale takes none.
 import { WEAPONS } from './weapons.js';
+import { SECONDARY_IDS } from './constants.js';
 import { MODES } from './modes.js';
 import { isAvailable } from './attachments.js';
 
@@ -71,6 +72,8 @@ export function dealLoadout(l, mods) {
     for (const c of String(out.primary)) h = (h * 31 + c.charCodeAt(0)) >>> 0;
     out.primary = SNIPERS[h % SNIPERS.length];
   }
+  // Overkill's second primary in the sidearm slot is no sidearm: Snipers Only puts the pistol back (a second sniper stays).
+  if (mods.includes('snipers') && !SECONDARY_IDS.includes(out.secondary) && WEAPONS[out.secondary]?.category !== 'Sniper') out.secondary = 'pistol';
   if (mods.includes('pistols')) {
     const pick = (gun, salt) => { let h = salt; for (const c of String(gun)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return PISTOLS[h % PISTOLS.length]; };
     if (WEAPONS[out.primary]?.category !== 'Pistol') out.primary = pick(out.primary, 0);

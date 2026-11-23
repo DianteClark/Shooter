@@ -44,10 +44,12 @@ MATCHES = [
     ('harvest', 'gwtdm'), ('harvest', 'gwdom'), ('harvest', 'gwhq'), ('harvest', 'gwko'), ('harvest', 'gwinf'),
     ('frontier', 'br'), ('frontier', 'brduo'), ('frontier', 'brsolo'), ('frontier', 'exq'), ('frontier', 'exd'),
     ('neon', 'zm'), ('polestar', 'zm'), ('frontier', 'rb'), ('frontier', 'rbduo'), ('pier', 'gf'),
+    # The 1122 wave: Conquest and Breakthrough, a district island, the abbey.
+    ('harvest', 'cq'), ('frontier', 'bt'), ('meridian', 'br'), ('kaldvik', 'exq'), ('saltmere', 'zm'),
     ('', 'training'), ('', 'range'), ('', 'tutorial'),
 ]
 ONLY = opt('--only', '')
-if ONLY: MATCHES = [m for m in MATCHES if m[1] in ONLY.split(',')]
+if ONLY: MATCHES = [m for m in MATCHES if m[1] in ONLY.split(',') or f'{m[0]}:{m[1]}' in ONLY.split(',')]   # a mode, or map:mode
 SHOT_SIZES = {(667, 375), (852, 393), (932, 430)}
 
 CHECK = r"""
@@ -92,7 +94,8 @@ CHECK = r"""
   add('tutorial card', document.querySelector('.tut-card'));
   add('perf overlay', document.querySelector('.perf'));
   add('tutorial skip', document.querySelector('.tut-skip'));
-  if (phase === 'dead') for (const s of ['.death-card', '.death-next', '.death-timer', '.mh-wait']) add(s.slice(1), q(s));
+  add('bf-oob', q('.bf-oob'));      // Conquest / Breakthrough's out-of-bounds plate.
+  if (phase === 'dead') for (const s of ['.death-card', '.death-next', '.death-timer', '.mh-wait', '.bf-deploy']) add(s.slice(1), q(s));
   const chat = q('.qc-btn');
   const inter = (a, b, pad = 0) => a.x0 < b.x1 - pad && b.x0 < a.x1 - pad && a.y0 < b.y1 - pad && b.y0 < a.y1 - pad;
   const live = ctl.el.classList.contains('live') && !ctl.el.classList.contains('down-state');
@@ -115,6 +118,15 @@ CHECK = r"""
   for (let i = 0; i < panels.length; i++) for (let j = i + 1; j < panels.length; j++) {
     if (inter(panels[i].r, panels[j].r, 1)) out.push(`overlap: ${panels[i].name} [${round(panels[i].r)}] and ${panels[j].name} [${round(panels[j].r)}]`);
   }
+  // Inside a strip row: the items side by side, and the zone chips inside their item (Conquest's chips ran under the
+  // ticket plate at 667 wide, bug sweep 2026-11-22).
+  for (const row of qa('.os-row')) {
+    const items = [...row.children].filter(shown).map(e => { const r = e.getBoundingClientRect(); return { n: e.className.split(' ')[0], r: { x0: r.left, y0: r.top, x1: r.right, y1: r.bottom } }; });
+    for (let i = 0; i < items.length; i++) for (let j = i + 1; j < items.length; j++)
+      if (inter(items[i].r, items[j].r, 1)) out.push(`overlap: strip row ${row.dataset.row} ${items[i].n} [${round(items[i].r)}] and ${items[j].n} [${round(items[j].r)}]`);
+  }
+  const chips = q('.obj-strip .obj-chips'), os = q('.obj-strip');
+  if (shown(chips) && shown(os)) { const a = chips.getBoundingClientRect(), b = os.getBoundingClientRect(); if (a.right > b.right + 1 || a.left < b.left - 1) out.push(`cut: zone chips ${Math.round(a.width)} wide in a strip item ${Math.round(b.width)} wide`); }
   // Kill feed rows: nothing may run out of its row (once a fresh row's slide-in is over).
   for (const row of qa('.feed .f-row')) row.getAnimations().forEach(a => a.finish());
   for (const row of qa('.feed .f-row')) {
@@ -144,11 +156,13 @@ SAFE = f"""(() => {{ const m = {G}.app.match, me = m?.sim?.byId.get(m.localId); 
 
 async def start(pg, mp, mode):
     url = f'http://localhost:{PORT}/?debug=1&bots=recruit' + (f'&map={mp}&mode={mode}' if mp else '')
-    await pg.goto(url)
-    await pg.wait_for_timeout(700)
+    await pg.goto(url, timeout=120000)
+    await pg.wait_for_function('!!window.__game?.Progress', timeout=120000)
     await pg.evaluate(f"{G}.Progress.name='Tester'; {G}.Progress.setFlag('tutorialOffered'); {G}.Options.set('lefty', false); {G}.Options.set('hudSize', 'normal'); {G}.Options.set('fps', true)")
-    await pg.reload()
-    await pg.wait_for_timeout(1000)
+    await pg.reload(timeout=120000)
+    # Wait for the title's backdrop before the first tap (taps while the title was still loading timed out under load).
+    await pg.wait_for_function('window.__game?.backdrop?.renderer && window.__game.backdrop.state === "live"', timeout=180000)
+    await pg.wait_for_timeout(400)
     if mode == 'tutorial': await pg.evaluate(f'{G}.tutorial()')
     elif mode == 'training': await pg.evaluate(f'{G}.training()')
     elif mode == 'range': await pg.evaluate(f'{G}.range()')
@@ -218,6 +232,7 @@ async def die(pg, mode):
 async def run(browser, mp, mode, failures, errors):
     ctx = await browser.new_context(viewport={'width': 852, 'height': 393}, has_touch=True, is_mobile=True)
     pg = await ctx.new_page()
+    pg.set_default_timeout(90000)
     pg.on('console', lambda m: errors.append(f'{mode}: {m.text}') if m.type == 'error' else None)
     pg.on('pageerror', lambda e: errors.append(f'{mode}: PAGEERR {e}'))
     try:

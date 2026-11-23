@@ -131,6 +131,9 @@ export class ModeHud {
     this.mods.innerHTML = mods.map(id => `<i title="${esc(MODS[id]?.name ?? id)}">${esc(MODS[id]?.short ?? id)}</i>`).join('');
     this.bf.prepare(this.rules, map, seed);
     this.hud.el.classList.toggle('bf-on', this.bf.on);
+    // Conquest's five to seven flag chips fill the state row on a phone (at 667 wide the ticket plate lay over the last
+    // chips): its status plate goes on the detail row under them. Every other mode keeps it beside its chips.
+    this.hud.strip.mount(this.status, { row: this.rules === 'cq' ? 1 : 0, order: 2 });
   }
 
   // How many zone chips the objective strip needs for this mode (null: the HUD's own count).

@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-22', title: 'Fixes',
+    build: '1123-1', date: '2026-11-23', title: 'Fixes',
     items: [
       'On smaller phones the Breakthrough mode button on the Ground War tab split its name mid-word; it now breaks as "Break-through".',
       'Battle royale drop maps no longer print place names over each other (Westgate and Old Quarter on Meridian City, Lifeboat Station and Fish Market on Kittiwake Bay, and others): a name that would collide moves just above or below.',
@@ -12,6 +12,9 @@ export const CHANGELOG = [
       'Campaign briefing on larger phones: the Deploy button of Starfall\'s final mission on Veteran ran off the bottom of the screen. The map picture now gives way.',
       'Campaign boss fights: the boss\'s health bar no longer sits over the bottom of the objective card on larger phones.',
       'The Golden Gun\'s card in the Gunsmith and its unlock sheet said "Reach level 1" while it stayed locked. They now say what earns it (max everything) and show its four steps with your progress.',
+      'Conquest on a smaller phone: the ticket plate no longer covers the last flags in the row along the top; it sits under them.',
+      'Snipers Only: a player with Overkill now gets a pistol in place of the second primary, as everyone else does.',
+      'Bots now get out from under an airstrike or a grenade when they are at full health, instead of stepping back and forth on the spot.',
     ],
   },
   {

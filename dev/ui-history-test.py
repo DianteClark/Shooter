@@ -135,7 +135,7 @@ async def main():
                 await pg.wait_for_function(f'{G}.match.sim.rules?.state === "live"', timeout=60000)
                 await pg.wait_for_timeout(500)
                 await pg.evaluate(f'({KILL})(2)')
-                await pg.wait_for_function(f'{G}.match.sim.rules?.state !== "live"', timeout=30000)
+                await pg.wait_for_function(f'{G}.match.sim.rules?.state !== "live"', timeout=120000)
                 await pg.wait_for_timeout(1500)
             await play('pier', 'gf', showdown)
             hist = json.loads(await pg.evaluate("localStorage.getItem('switchyard.history')"))['list']

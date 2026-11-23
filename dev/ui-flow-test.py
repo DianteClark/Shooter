@@ -92,7 +92,8 @@ async def main():
                 # tap timeout, past the vote's own clock. The button's handler is the same one a tap reaches.
                 await pg.wait_for_selector('.vote-card[data-i="0"]', timeout=20000)
                 await pg.evaluate("document.querySelector('.vote-card[data-i=\"0\"]')?.click()")
-                await pg.wait_for_timeout(100)
+                try: await pg.wait_for_function("window.__game.app.vote?.mine === 0", timeout=5000)
+                except Exception: pass
                 mine = await pg.evaluate("window.__game.app.vote?.mine")
                 # A one-card vote (Battle Royale has one giant map) can resolve before the tap lands.
                 check('  ballot cast', mine == 0 or len(opts) == 1, mine)

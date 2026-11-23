@@ -134,7 +134,7 @@ function hqWatch() {
     if (e.kind === 'live') { w.opens++; if (w.at != null) w.worst = Math.max(w.worst, sim.time - w.at); w.at = null; }
   };
   w.check = (sim, label) => {
-    assert.ok(w.closes >= 1, `${label}: an HQ closed`);
+    assert.ok(w.closes >= 1 || sim.phase === 'ended', `${label}: an HQ closed`);     // (The score limit can end the match first.)
     assert.ok(w.worst <= 5.2, `${label}: next HQ within the gap (${w.worst.toFixed(2)} s)`);
     if (w.at != null && sim.phase !== 'ended') assert.ok(sim.time - w.at <= 5.2, `${label}: stuck in the gap for ${(sim.time - w.at).toFixed(1)} s`);
   };
