@@ -187,7 +187,9 @@ async def play_once(pg, ev, name, kind, arg, notes, fails, shot, before, rnd_i):
             await pg.wait_for_timeout(300)
             await pg.locator('[data-act="mpFind"]').first.click()
         elif kind == 'custom':
-            await pg.locator('[data-act="custom"]').first.click()
+            # Through the DOM: under load a locator click can land and still time out waiting while the match boots.
+            await pg.wait_for_selector('[data-act="custom"]', timeout=90000)
+            await ev("document.querySelector('[data-act=\"custom\"]').click()")
         else:
             await ev(f"window.__game.{arg}()")
             if arg == 'training':
